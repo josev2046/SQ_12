@@ -1,5 +1,8 @@
 # SQ-12 Analog sequencer & synthesiser 
 
+[![DOI](https://zenodo.org/badge/1354630383.svg)](https://doi.org/10.5281/zenodo.22252826) 
+
+
 ## Operating manual
 
 1. [Introduction](#1-introduction)
