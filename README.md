@@ -30,7 +30,7 @@ The front panel is partitioned into functional zones:
 - **Oscillator (VCO)**
 - **Envelope (ADSR)**
 - **The 3×12 sequencer grid**
-- **Keyboard transpose / Preview** & **Demo patches**
+- **Keyboard transpose / Preview** & **demo patches**
 
 <img width="2520" height="860" alt="sq12-top-panel" src="https://github.com/user-attachments/assets/5342e503-ca90-4bef-a28f-e3b3bc4c3fff" />
 
