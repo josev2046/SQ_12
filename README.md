@@ -3,12 +3,12 @@
 ## Operating manual
 
 1. [Introduction](#1-introduction)
-2. [Panel Controls & Architecture](#2-panel-controls--architecture)
-3. [The Sequencer Grid](#3-the-sequencer-grid)
-4. [CRT Data Screen & Keyboard Transpose](#4-crt-data-screen--keyboard-transpose)
-5. [Tutorials & Factory Demo Patches](#5-tutorials--factory-demo-patches)
-6. [Technical Specifications](#6-technical-specifications)
-7. [Credits & Copyright](#credits--copyright)
+2. [Panel controls & architecture](#2-panel-controls--architecture)
+3. [The sequencer grid](#3-the-sequencer-grid)
+4. [CRT data screen & keyboard transpose](#4-crt-data-screen--keyboard-transpose)
+5. [Tutorials & factory demo patches](#5-tutorials--factory-demo-patches)
+6. [Technical specifications](#6-technical-specifications)
+7. [Credits & copyright](#credits--copyright)
 
 ---
 
