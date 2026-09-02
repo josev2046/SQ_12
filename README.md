@@ -1,6 +1,6 @@
-# SQ-12 Analog Sequencer & Synthesiser — Operating Manual
+# SQ-12 Analog sequencer & synthesiser 
 
-## Table of Contents
+## Operating manual
 
 1. [Introduction](#1-introduction)
 2. [Panel Controls & Architecture](#2-panel-controls--architecture)
@@ -20,21 +20,21 @@ The SQ-12 provides independent three-channel voltage control (**Channels A, B, a
 
 ---
 
-## 2. Panel Controls & Architecture
+## 2. Panel controls & architecture
 
 The front panel is partitioned into functional zones:
 
-- **CRT Data Screen**
+- **CRT data screen**
 - **Transport / Clock**
 - **Routing & Mode**
 - **Oscillator (VCO)**
 - **Envelope (ADSR)**
-- **The 3×12 Sequencer Grid**
-- **Keyboard Transpose / Preview** & **Demo Patches**
+- **The 3×12 sequencer grid**
+- **Keyboard transpose / Preview** & **Demo patches**
 
 <img width="2520" height="860" alt="sq12-top-panel" src="https://github.com/user-attachments/assets/5342e503-ca90-4bef-a28f-e3b3bc4c3fff" />
 
-### 2.1 Logo Badge
+### 2.1 Logo badge
 
 At the top left, four small nameplate panels spell out the unit's name as a stylised patch-bay logotype — **S**, **Q**, **1**, **2** ("SQ‑12") — sitting above the `ANALOG SEQUENCER • VCA / GATE` legend. This badge is purely decorative and has no functional role; the only moving part is a small LED dot on the **Q** panel that blinks gently as an ambient "signal peak" accent light.
 
@@ -42,7 +42,7 @@ At the top left, four small nameplate panels spell out the unit's name as a styl
 
 | Control | Function |
 | :--- | :--- |
-| **Transport Pill** (●  ▶■) | Toggles the internal clock generator on/off. The pill glows red while the sequence is running. |
+| **Transport pill** (●  ▶■) | Toggles the internal clock generator on/off. The pill glows red while the sequence is running. |
 | **◄ / ►** (Step Buttons) | Manually steps the sequencer backward or forward by one step — works whether the clock is stopped or running. |
 | **SPEED** (Rotary) | Sets the master clock tempo — from 40 BPM (fully anti-clockwise) up to 240 BPM (fully clockwise). |
 | **PORTA** (Rotary) | Controls the pitch glide time between consecutive steps — from instantaneous stepping (0.01s) to a long, sweeping glissando (0.31s). |
@@ -77,7 +77,7 @@ Four knobs shape the VCA's amplitude envelope on every triggered step:
 
 ---
 
-## 3. The Sequencer Grid
+## 3. The sequencer grid
 
 The main matrix consists of 12 vertical step columns and three control-voltage rows, with step LEDs above and trigger/reset jacks below.
 
@@ -85,47 +85,47 @@ The main matrix consists of 12 vertical step columns and three control-voltage r
 
 *Diagram shows the grid at rest (Step 1), with an example reset patch (lit orange jack) on Step 5, and the keyboard transpose bar with root key C active.*
 
-### 3.1 Step Indicators & Pilot Lights
+### 3.1 Step indicators & pilot lights
 
 - **Step LEDs (1–12):** Small indicators above each column illuminate to signal the currently active sequence step.
-- **Pilot Dots (CH-A / CH-B):** Green dots to the left of each row label. In 12-Step mode, both remain lit. In 24-Step mode, the **CH-A** dot lights while steps 1–12 play, and the **CH-B** dot lights while steps 13–24 play.
+- **Pilot dots (CH-A / CH-B):** Green dots to the left of each row label. In 12-Step mode, both remain lit. In 24-Step mode, the **CH-A** dot lights while steps 1–12 play, and the **CH-B** dot lights while steps 13–24 play.
 
-### 3.2 Channel Knob Specifications & Scaling
+### 3.2 Channel knob specifications & scaling
 
-#### CH-A & CH-B (Bipolar Controls)
+#### CH-A & CH-B (bipolar controls)
 
 | Property | Value |
 | :--- | :--- |
-| Voltage Output | −5V to +5V |
-| Default Position | 12 o'clock (0.00V, center-detent) |
-| Fully Anti-Clockwise | −5.00V |
-| Straight Up | 0.00V |
-| Fully Clockwise | +5.00V |
+| Voltage output | −5V to +5V |
+| Default position | 12 o'clock (0.00V, center-detent) |
+| Fully anti-clockwise | −5.00V |
+| Straight up | 0.00V |
+| Fully clockwise | +5.00V |
 | Scaling | Calibrated to equal-tempered semitones at 1V/Octave (1 Octave = 1.00V = 12 semitones) |
 
 #### CH-C (Unipolar Control)
 
 | Property | Value |
 | :--- | :--- |
-| Voltage Output | 0V to +5V |
-| Default Position | 12 o'clock (+2.50V, midpoint) |
-| Fully Anti-Clockwise | 0.00V |
-| Straight Up | +2.50V |
-| Fully Clockwise | +5.00V |
+| Voltage output | 0V to +5V |
+| Default position | 12 o'clock (+2.50V, midpoint) |
+| Fully anti-clockwise | 0.00V |
+| Straight up | +2.50V |
+| Fully clockwise | +5.00V |
 
-### 3.3 Trigger Out & Reset Patch Points
+### 3.3 Trigger out & reset patch points
 
 At the bottom of each step column lies a **TRIG OUT** jack. Clicking or tapping a jack patches an external reset point:
 
-- **Patched Jack (Steps 1–12):** Glows amber and instantly forces the sequencer back to Step 1 upon reaching that step (e.g., patching Step 5 creates a 4-step loop).
-- **Secondary Patch (Steps 13–24, 24-Step Mode):** Clicking an active jack while in 24-step mode moves the reset point into the Row B cycle (e.g., Step 17 reset).
-- **Reset Status:** The active reset step is displayed on the CRT (`RESET: STEP nn` or `EXT: STEP nn`) — see Section 4.
+- **Patched jack (Steps 1–12):** Glows amber and instantly forces the sequencer back to Step 1 upon reaching that step (e.g., patching Step 5 creates a 4-step loop).
+- **Secondary patch (Steps 13–24, 24-Step Mode):** Clicking an active jack while in 24-step mode moves the reset point into the Row B cycle (e.g., Step 17 reset).
+- **Reset status:** The active reset step is displayed on the CRT (`RESET: STEP nn` or `EXT: STEP nn`) — see Section 4.
 
 ---
 
-## 4. CRT Data Screen & Keyboard Transpose
+## 4. CRT data screen & keyboard transpose
 
-### 4.1 CRT Readout
+### 4.1 CRT readout
 
 The green phosphor CRT screen, top right of the panel, provides real-time diagnostic telemetry alongside a live oscilloscope trace of the voice output:
 
@@ -137,21 +137,21 @@ The green phosphor CRT screen, top right of the panel, provides real-time diagno
 | **NOTE** | Displays the active pitch in musical notation relative to root pitch C3 (e.g., `NOTE: C3`, `NOTE: F#3`). |
 | **Patch Status** | Reads `PATCH: NONE` when no reset is patched, `RESET: STEP nn` for a patch on steps 1–12, or `EXT: STEP nn` once a 24-step secondary patch is set. |
 
-### 4.2 Keyboard Transpose / Preview Bar
+### 4.2 Keyboard transpose / Preview bar
 
 Located at the bottom left of the chassis is an interactive **13-key virtual keyboard (C to C)**:
 
-- **Sequence Transposition:** Tapping any key transposes the entire pitch sequence in real-time by the selected semitone offset relative to C.
-- **Live Audition:** Tapping a key while the sequencer is stopped previews Step 1's pitch transposed to the selected key.
-- **Active Key Highlight:** The current transpose root key is highlighted in red.
+- **Sequence transposition:** Tapping any key transposes the entire pitch sequence in real-time by the selected semitone offset relative to C.
+- **Live audition:** Tapping a key while the sequencer is stopped previews Step 1's pitch transposed to the selected key.
+- **Active key highlight:** The current transpose root key is highlighted in red.
 
 ---
 
-## 5. Tutorials & Factory Demo Patches
+## 5. Tutorials & factory demo patches
 
 Use the built-in demo buttons at the bottom right of the panel to load classic sequence configurations.
 
-### 5.1 Demo 1: "EBM" (24-Step Bassline)
+### 5.1 Demo 1: "EBM" (24-step bassline)
 
 **Button:** `DEMO 1: EBM`
 
@@ -162,11 +162,11 @@ Use the built-in demo buttons at the bottom right of the panel to load classic s
 | Speed | ~110 BPM |
 | Porta | 0 (disabled) |
 | Dest | VCF |
-| Reset Point | Patched to Step 17 (creates a 16-step sequence chaining Row A and B) |
+| Reset point | Patched to Step 17 (creates a 16-step sequence chaining Row A and B) |
 
-**Sound Profile:** A driving, DAF inspired 16-step bassline demonstrating 24-step row chaining.
+**Sound profile:** A driving, DAF inspired 16-step bassline demonstrating 24-step row chaining.
 
-### 5.2 Demo 2: "ACID" (12-Step Continuous Modulation)
+### 5.2 Demo 2: "ACID" (12-step continuous modulation)
 
 **Button:** `DEMO 2: ACID`
 
@@ -177,27 +177,27 @@ Use the built-in demo buttons at the bottom right of the panel to load classic s
 | Speed | 140 BPM |
 | Porta | 0 (disabled) |
 | Dest | VCF |
-| Reset Point | None patched |
+| Reset point | None patched |
 
-**Sound Profile:** A classic 12-step monophonic acid motif utilizing Channel C to sweep the filter cutoff frequency independently per step.
+**Sound profile:** A classic 12-step monophonic acid motif utilizing Channel C to sweep the filter cutoff frequency independently per step.
 
 ---
 
-## 6. Technical Specifications
+## 6. Technical specifications
 
-- **Sequencer Architecture:** 3-channel, 12-step matrix (expandable to 24-step).
-- **Audio Engine:** Web Audio API monophonic synthesiser — selectable VCO waveform (triangle/square/sawtooth/sine), footage/scale switch, ±12-semitone pitch trim, low-pass VCF with resonance, and a full ADSR-shaped VCA envelope.
-- **Control Voltage Output:**
+- **Sequencer architecture:** 3-channel, 12-step matrix (expandable to 24-step).
+- **Audio engine:** Web Audio API monophonic synthesiser — selectable VCO waveform (triangle/square/sawtooth/sine), footage/scale switch, ±12-semitone pitch trim, low-pass VCF with resonance, and a full ADSR-shaped VCA envelope.
+- **Control voltage output:**
   - Channels A & B: Bipolar −5V to +5V or −1V to +1V (selectable).
   - Channel C: Unipolar 0V to +5V.
-- **Clock Tempo:** Variable, 40 BPM to 240 BPM.
-- **Touch & Mobile Support:** Integrated W3C Pointer Events with vertical drag-scaling and horizontal grid scrolling.
+- **Clock tempo:** Variable, 40 BPM to 240 BPM.
+- **Touch & mobile support:** Integrated W3C Pointer Events with vertical drag-scaling and horizontal grid scrolling.
 
 ---
 
 ## Credits & Copyright
 
-**SQ-12 Analog Sequencer**
+**SQ-12 Analog sequencer**
 Created & Developed by **Jose Velazquez MA**
 Published by **Voltage & Wave**
 Website: [voltageandwave.co.uk](https://voltageandwave.co.uk/)
