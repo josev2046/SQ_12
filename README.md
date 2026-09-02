@@ -24,7 +24,7 @@ The SQ-12 provides independent three-channel voltage control (**Channels A, B, a
 
 The front panel is partitioned into functional zones:
 
-- **CRT Data Screen** (top right)
+- **CRT Data Screen**
 - **Transport / Clock**
 - **Routing & Mode**
 - **Oscillator (VCO)**
