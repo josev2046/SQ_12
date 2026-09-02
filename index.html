@@ -1192,6 +1192,8 @@
             
             if (direction === 1) {
                 currentStep++;
+                
+                // 1. Standard max steps reset
                 if (currentStep >= maxSteps) {
                     if (activeSeqMode.endsWith('one') && !manual) {
                         stopSequencer();
@@ -1200,11 +1202,14 @@
                     currentStep = 0;
                 }
                 
-                if (resetStep !== null && !manual) {
+                // 2. Patch cord reset
+                if (resetStep !== null) {
                     const hardwareMatch = (resetStep < 12) && ((currentStep % 12) === resetStep);
                     const absoluteMatch = (resetStep >= 12) && (currentStep === resetStep);
+                    
                     if (hardwareMatch || absoluteMatch) {
-                        if (activeSeqMode.endsWith('one')) {
+                        // Only stop the sequencer in 'once' mode if it's playing automatically
+                        if (activeSeqMode.endsWith('one') && !manual) {
                             stopSequencer();
                             return;
                         }
@@ -1213,8 +1218,16 @@
                 }
             } else {
                 currentStep--;
+                
+                // 3. Reverse step wrap-around logic
                 if (currentStep < 0) {
-                    currentStep = maxSteps - 1;
+                    if (resetStep !== null) {
+                        // Wrap to the step just before the patched reset point
+                        currentStep = resetStep - 1;
+                    } else {
+                        // Wrap to the absolute end if no patch exists
+                        currentStep = maxSteps - 1;
+                    }
                 }
             }
             
