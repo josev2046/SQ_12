@@ -14,7 +14,7 @@
 
 ## 1. Introduction
 
-Welcome to the **SQ-12 Analog Sequencer**, a 12-step control voltage generator and monophonic synthesiser designed as a tribute and homage to classic 1970s Japanese electronic instruments — most notably akin to the legendary Korg MS-10, albeit with an Oberheim feel.
+Welcome to the **SQ-12 Analog Sequencer**, a 12-step control voltage generator and monophonic synthesiser designed as a tribute and homage to classic 1970s Japanese electronic instruments — most notably akin to the legendary Korg SQ-10, albeit with an Oberheim feel.
 
 The SQ-12 provides independent three-channel voltage control (**Channels A, B, and C**), allowing you to sequence pitch, filter cutoff frequencies, dynamic volume accents, and non-linear clock modulation simultaneously. A full **VCO / ADSR** voice sits behind the sequencer, giving you waveform, footage/scale, coarse pitch, and envelope shaping alongside the classic step-sequencing workflow — bridging the raw character of vintage hardware with modern browser and mobile flexibility.
 
