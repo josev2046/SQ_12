@@ -1,0 +1,1567 @@
+<!DOCTYPE html>
+<!-- 
+    SQ-12 Analog Sequencer (Locked & Scrollable Master Console)
+    Created & Developed by Jose Velazquez MA
+    Voltage & Wave (https://voltageandwave.co.uk/)
+    -- Patched: Added DAW functionality (Local WAV Recording + Web MIDI Output) --
+-->
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>SQ-12 Analog Sequencer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { 
+            background-color: #0d0f12; 
+            color: #1a1e24; 
+            font-family: monospace; 
+            text-transform: uppercase; 
+            padding: 1.25rem; 
+            user-select: none; 
+            -webkit-tap-highlight-color: transparent;
+        }
+        
+        .synth-enclosure {
+            position: relative;
+            display: flex;
+            align-items: stretch;
+            border-radius: 10px;
+            box-shadow: 0 25px 60px rgba(0,0,0,0.95), 0 0 40px rgba(0,0,0,0.8);
+        }
+
+        .wooden-ear {
+            width: 26px;
+            background: linear-gradient(90deg, #2b150c 0%, #522815 30%, #3a1b0d 70%, #1c0b05 100%);
+            border-top: 2px solid #733c1d;
+            border-bottom: 3px solid #0f0502;
+            box-shadow: inset 0 2px 4px rgba(255,255,255,0.15), inset 0 -2px 6px rgba(0,0,0,0.9);
+            flex-shrink: 0;
+        }
+        .wooden-ear-left { border-top-left-radius: 10px; border-bottom-left-radius: 10px; border-right: 2px solid #111; }
+        .wooden-ear-right { border-top-right-radius: 10px; border-bottom-right-radius: 10px; border-left: 2px solid #111; }
+
+        .chassis { 
+            background: radial-gradient(circle at 50% 20%, #f0ebd8 0%, #e2dbc8 60%, #cebba8 100%); 
+            border-top: 3px solid #f7f4e9; 
+            border-bottom: 4px solid #82796e; 
+            padding: 24px 28px; 
+            flex-grow: 1;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            box-shadow: inset 0 1px 3px rgba(255, 255, 255, 0.8), inset 0 -2px 5px rgba(0,0,0,0.3);
+        }
+        @media (min-width: 768px) { .chassis { padding: 32px 36px; } }
+
+        .rack-bolt {
+            width: 12px; height: 12px; border-radius: 50%;
+            background: radial-gradient(circle at 30% 30%, #a39c8e 0%, #3a362f 80%);
+            border: 1px solid #1a1815;
+            box-shadow: inset 0 1px 1px rgba(255,255,255,0.6), 0 2px 4px rgba(0,0,0,0.3);
+            position: absolute;
+        }
+        .bolt-tl { top: 12px; left: 12px; }
+        .bolt-tr { top: 12px; right: 12px; }
+        .bolt-bl { bottom: 12px; left: 12px; }
+        .bolt-br { bottom: 12px; right: 12px; }
+
+        .logo-panel {
+            background: linear-gradient(180deg, #2a2722 0%, #171614 100%);
+            border: 1.5px solid #000;
+            box-shadow: inset 0 1px 1px rgba(255,255,255,0.2), 0 2px 4px rgba(0,0,0,0.4);
+        }
+        .logo-panel-accent {
+            background: linear-gradient(180deg, #8a2217 0%, #4a0d07 100%);
+            border: 1.5px solid #000;
+            box-shadow: inset 0 1px 1px rgba(255,255,255,0.3), 0 0 10px rgba(200, 58, 42, 0.4);
+        }
+        .logo-panel-accent .logo-char { color: #ff9d93; }
+        .logo-panel .logo-char { color: #f0ebd8; }
+        
+        .patch-jack-dot {
+            width: 6px; height: 6px; border-radius: 50%;
+            background: radial-gradient(circle at 35% 35%, #ff7777 0%, #ff1111 60%, #990000 100%);
+            box-shadow: 0 0 6px #ff2a2a, inset 0 1px 1px rgba(255,255,255,0.8);
+            animation: blink-led 2s infinite ease-in-out;
+        }
+        @keyframes blink-led {
+            0%, 100% { opacity: 1; filter: brightness(1); }
+            50% { opacity: 0.4; filter: brightness(0.6); }
+        }
+
+        .panel-outline {
+            border: 1.5px solid #38342e;
+            border-radius: 6px;
+            background: rgba(0, 0, 0, 0.025);
+            box-shadow: inset 0 1px 2px rgba(0,0,0,0.05), 0 1px 0 rgba(255,255,255,0.7);
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        .panel-divider {
+            width: 1.5px;
+            height: 60px;
+            background: linear-gradient(180deg, transparent 0%, rgba(56, 52, 46, 0.15) 15%, rgba(56, 52, 46, 0.15) 85%, transparent 100%);
+            border-right: 1px solid rgba(255,255,255,0.3);
+            flex-shrink: 0;
+        }
+
+        .led { 
+            width: 14px; height: 12px; border-radius: 50%; 
+            background: radial-gradient(circle at 35% 35%, #5a1212 0%, #200303 70%); 
+            border: 2px solid #111; 
+            box-shadow: inset 0 1px 2px rgba(255,255,255,0.2), 0 2px 4px rgba(0,0,0,0.3); 
+            margin: 0 auto; 
+        }
+        .active .led { 
+            background: radial-gradient(circle at 35% 35%, #ff7777 0%, #ff1111 60%, #990000 100%); 
+            box-shadow: 0 0 14px #ff2a2a, 0 0 4px #ff8888, inset 0 1px 2px rgba(255,255,255,0.8); 
+        }
+        
+        .pilot { 
+            width: 9px; height: 9px; border-radius: 50%; 
+            background: radial-gradient(circle at 35% 35%, #0f4a0f 0%, #021a02 80%); 
+            border: 1px solid #111; 
+            box-shadow: inset 0 1px 1px rgba(255,255,255,0.2); 
+            transition: all 0.1s; 
+        }
+        .pilot-active { 
+            background: radial-gradient(circle at 35% 35%, #66ff66 0%, #00ff00 70%); 
+            box-shadow: 0 0 10px #2aff2a, inset 0 1px 2px rgba(255,255,255,0.6); 
+        }
+
+        .patch-point { 
+            width: 24px; height: 24px; border-radius: 50%; 
+            background: radial-gradient(circle, #080808 40%, #1a1a1a 50%, #8a6f27 85%, #d4af37 100%); 
+            border: 2px solid #111; 
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.8), 0 1px 2px rgba(255,255,255,0.6); 
+            margin: 0 auto; cursor: pointer; transition: all 0.2s; 
+        }
+        .patch-point:hover { filter: brightness(1.2); }
+        .patch-point.patched { background: radial-gradient(circle, #ffea78 20%, #dca824 60%, #523b00 100%); box-shadow: 0 0 14px #dca824; }
+        .patch-point.patched-b { background: radial-gradient(circle, #ff9e78 20%, #dc5a24 60%, #521800 100%); box-shadow: 0 0 14px #dc5a24; }
+        
+        .knob-wrapper { display: flex; flex-direction: column; align-items: center; gap: 4px; position: relative; width: 56px; }
+        .tick-container { position: relative; width: 56px; height: 56px; display: flex; align-items: center; justify-content: center; }
+        
+        .tick-ring {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; border-radius: 50%;
+            -webkit-mask: radial-gradient(circle, transparent 22px, #000 23px, #000 28px, transparent 28px);
+            mask: radial-gradient(circle, transparent 22px, #000 23px, #000 28px, transparent 28px);
+            background: conic-gradient(from -135deg,
+                #221e1a 0deg 1.5deg, transparent 1.5deg 27deg, #221e1a 27deg 28.5deg, transparent 28.5deg 54deg,
+                #221e1a 54deg 55.5deg, transparent 55.5deg 81deg, #221e1a 81deg 82.5deg, transparent 82.5deg 108deg,
+                #221e1a 108deg 109.5deg, transparent 109.5deg 135deg, #221e1a 135deg 136.5deg, transparent 136.5deg 162deg,
+                #221e1a 162deg 163.5deg, transparent 163.5deg 189deg, #221e1a 189deg 190.5deg, transparent 190.5deg 216deg,
+                #221e1a 216deg 217.5deg, transparent 217.5deg 243deg, #221e1a 243deg 244.5deg, transparent 244.5deg 270deg,
+                #221e1a 270deg 271.5deg, transparent 271.5deg 360deg
+            );
+        }
+
+        .tick-label { position: absolute; font-size: 8px; font-weight: bold; color: #221e1a; line-height: 1; pointer-events: none; }
+        .label-top { top: -2px; left: 50%; transform: translateX(-50%); }
+        .label-left { bottom: 2px; left: 2px; }
+        .label-right { bottom: 2px; right: 2px; }
+
+        .knob { 
+            width: 42px; height: 40px; border-radius: 50%; 
+            background: radial-gradient(circle at 35% 35%, #2d3036 0%, #15171a 70%, #050608 100%); 
+            border: 2px solid #000; cursor: ns-resize; position: relative; z-index: 2;
+            box-shadow: inset 0 1px 2px rgba(255,255,255,0.3), 0 4px 7px rgba(0,0,0,0.35);
+            transform: rotate(-135deg); touch-action: none;
+            transition: transform 0.08s cubic-bezier(0.2, 0.8, 0.2, 1);
+        }
+        .knob::after { content: ''; position: absolute; top: 3px; left: 18px; width: 2px; height: 13px; background: #fff; border-radius: 1px; box-shadow: 0 0 2px rgba(255,255,255,0.9); }
+        
+        .row-label { width: 55px; font-weight: bold; font-size: 12px; text-align: right; color: #1f1a14; margin-right: 16px; display: flex; align-items: center; justify-content: flex-end; gap: 6px; line-height: 1.1; flex-shrink: 0; }
+        
+        .crt-screen { 
+            background: #041004; 
+            border: 4px solid #2a2722; 
+            border-radius: 8px;
+            box-shadow: inset 0 0 20px rgba(0, 255, 0, 0.25), inset 0 0 12px #000, 0 3px 6px rgba(0,0,0,0.4); 
+            position: relative; overflow: hidden;
+            box-sizing: border-box;
+        }
+        .crt-screen::before {
+            content: " "; position: absolute; top: 0; left: 0; bottom: 0; right: 0;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03));
+            z-index: 5; background-size: 100% 3px, 6px 100%; pointer-events: none;
+        }
+
+        .rocker-button {
+            background: linear-gradient(180deg, #991b1b 0%, #5c0f0f 100%);
+            border: 2px solid #280505;
+            box-shadow: 0 3px 0 #1a0303, 0 4px 6px rgba(0,0,0,0.3), inset 0 1px 1px rgba(255,255,255,0.3);
+            transition: all 0.08s ease;
+        }
+        .rocker-button:active { transform: translateY(2px); box-shadow: 0 1px 0 #1a0303; }
+        .rocker-button.is-active {
+            background: linear-gradient(180deg, #ef4444 0%, #991b1b 100%);
+            border-color: #fca5a5;
+            box-shadow: 0 3px 0 #1a0303, 0 0 16px rgba(239, 68, 68, 0.7);
+        }
+
+        .tactile-button {
+            background: linear-gradient(180deg, #33363d 0%, #191a1e 100%);
+            border: 2px solid #000;
+            color: #f0ebd8;
+            box-shadow: 0 2px 0 #000, 0 3px 5px rgba(0,0,0,0.3);
+            transition: all 0.08s ease;
+        }
+        .tactile-button:active { transform: translateY(1px); }
+        .tactile-button.active-toggle { background: linear-gradient(180deg, #c83a2a 0%, #801f13 100%); border-color: #ff8878; color: #fff; box-shadow: 0 2px 0 #000, 0 0 10px rgba(200, 58, 42, 0.8); }
+
+        .oct-btn, .dest-btn, .mode-btn, .wave-btn {
+            background: linear-gradient(180deg, #2d3036 0%, #17181c 100%);
+            border: 1.5px solid #000;
+            color: #cebba8;
+            font-weight: 900;
+            font-size: 8px;
+            padding: 4px 6px;
+            border-radius: 3px;
+            box-shadow: 0 2px 0 #000;
+            transition: all 0.08s ease;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .oct-btn.oct-active, .dest-btn.dest-active, .mode-btn.mode-active, .wave-btn.wave-active {
+            background: linear-gradient(180deg, #c83a2a 0%, #801f13 100%);
+            border-color: #ff8878;
+            color: #fff;
+            box-shadow: 0 2px 0 #000, 0 0 10px rgba(200, 58, 42, 0.8);
+        }
+
+        .volt-rocker {
+            width: 26px; height: 44px; border-radius: 4px;
+            background: linear-gradient(180deg, #15171a 0%, #2d3036 100%);
+            border: 2px solid #000;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.4);
+            display: flex; flex-direction: column; justify-content: space-between; align-items: center;
+            padding: 2px; cursor: pointer;
+        }
+        .volt-rocker-cap {
+            width: 18px; height: 18px; border-radius: 2px;
+            background: linear-gradient(180deg, #3d424a 0%, #1a1c20 100%);
+            border: 1px solid #000;
+            transition: all 0.1s ease;
+        }
+        .volt-toggle-top .volt-rocker-cap { transform: translateY(0px); background: linear-gradient(180deg, #c83a2a 0%, #801f13 100%); }
+        .volt-toggle-bottom .volt-rocker-cap { transform: translateY(18px); background: linear-gradient(180deg, #3d424a 0%, #1a1c20 100%); }
+
+        .key-white { background: linear-gradient(180deg, #ffffff 0%, #d8d3c5 100%); color: #111; border: 2px solid #111; border-radius: 0 0 4px 4px; box-shadow: 0 3px 4px rgba(0,0,0,0.25); }
+        .key-white.active-key { background: #c83a2a; color: #fff; box-shadow: 0 0 12px #c83a2a; }
+        .key-black { background: linear-gradient(180deg, #222 0%, #050505 100%); color: #888; border: 2px solid #000; border-radius: 0 0 3px 3px; z-index: 10; box-shadow: 0 3px 4px rgba(0,0,0,0.5); }
+        .key-black.active-key { background: #c83a2a; color: #fff; box-shadow: 0 0 12px #c83a2a; }
+
+        .grid-scroll {
+            scrollbar-width: thin;
+            scrollbar-color: #38342e #cebba8;
+        }
+        .grid-scroll::-webkit-scrollbar { height: 8px; }
+        .grid-scroll::-webkit-scrollbar-track { background: #cebba8; border-radius: 4px; }
+        .grid-scroll::-webkit-scrollbar-thumb { background: #38342e; border-radius: 4px; }
+    </style>
+</head>
+<body class="min-h-screen flex justify-center items-start">
+    <div class="synth-enclosure w-full max-w-[1240px]">
+        <div class="wooden-ear wooden-ear-left"></div>
+
+        <div class="chassis w-full">
+            <div class="rack-bolt bolt-tl"></div>
+            <div class="rack-bolt bolt-tr"></div>
+            <div class="rack-bolt bolt-bl"></div>
+            <div class="rack-bolt bolt-br"></div>
+            
+            <!-- HEADER -->
+            <div class="flex items-center justify-between w-full mb-6 pb-4 border-b-2 border-[#38342e]/30">
+                <div class="flex flex-col gap-1.5">
+                    <div class="flex items-center gap-1.5 select-none">
+                        <div class="logo-panel-accent w-10 h-11 rounded flex flex-col items-center justify-center relative">
+                            <span class="logo-char font-mono font-black text-xl tracking-tighter leading-none">S</span>
+                            <span class="text-[6px] font-bold text-[#ff9d93]/60 tracking-widest mt-0.5">MOD</span>
+                        </div>
+                        <div class="logo-panel-accent w-10 h-11 rounded flex flex-col items-center justify-between py-1 relative">
+                            <span class="logo-char font-mono font-black text-xl tracking-tighter leading-none mt-0.5">Q</span>
+                            <div class="patch-jack-dot mb-0.5" title="Signal Peak LED"></div>
+                        </div>
+                        <div class="logo-panel w-10 h-11 rounded flex flex-col items-center justify-center relative ml-1">
+                            <span class="logo-char font-mono font-black text-xl tracking-tighter leading-none">1</span>
+                            <span class="text-[6px] font-bold text-[#82796e] tracking-widest mt-0.5">CH</span>
+                        </div>
+                        <div class="logo-panel w-10 h-11 rounded flex flex-col items-center justify-center relative">
+                            <span class="logo-char font-mono font-black text-xl tracking-tighter leading-none">2</span>
+                            <span class="text-[6px] font-bold text-[#82796e] tracking-widest mt-0.5">OUT</span>
+                        </div>
+                    </div>
+                    <div class="flex items-center justify-between w-full text-[8px] font-mono font-bold tracking-widest text-[#38342e] border-t border-[#38342e]/30 pt-1">
+                        <span>ANALOG SEQUENCER</span>
+                        <span class="text-[#c83a2a]">•</span>
+                        <span>VCA / GATE</span>
+                    </div>
+                </div>
+                
+                <div class="crt-screen w-[320px] h-[72px] flex items-center justify-between px-4 py-2 flex-shrink-0 ml-4 hidden md:flex">
+                    <div class="flex-shrink-0 flex items-center justify-center">
+                        <canvas id="scopeCanvas" width="110" height="50" class="border border-[#111] z-10"></canvas>
+                    </div>
+                    <div class="border-l border-[#0f0]/30 h-[50px] mx-4 z-10"></div>
+                    <div class="text-[#0f0] font-mono text-[10px] text-right leading-tight z-10 flex flex-col justify-center h-full flex-1">
+                        <div id="dispStep" class="mb-0.5">STEP: --</div>
+                        <div id="dispVolt" class="mb-0.5">VOLT: 0.00</div>
+                        <div id="dispNote" class="mb-1">NOTE: C2</div>
+                        <div id="resetStatus" class="text-[9px] text-[#ffaa00] font-bold tracking-wider mt-1 opacity-90">PATCH: NONE</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Mobile CRT -->
+            <div class="w-full mb-6 flex md:hidden justify-center">
+                <div class="crt-screen w-full max-w-[320px] h-[72px] flex items-center justify-between px-4 py-2">
+                    <div class="flex-shrink-0 flex items-center justify-center">
+                        <canvas id="scopeCanvasMobile" width="110" height="50" class="border border-[#111] z-10"></canvas>
+                    </div>
+                    <div class="border-l border-[#0f0]/30 h-[50px] mx-4 z-10"></div>
+                    <div class="text-[#0f0] font-mono text-[10px] text-right leading-tight z-10 flex flex-col justify-center h-full flex-1">
+                        <div id="dispStepMobile" class="mb-0.5">STEP: --</div>
+                        <div id="dispVoltMobile" class="mb-0.5">VOLT: 0.00</div>
+                        <div id="dispNoteMobile" class="mb-1">NOTE: C2</div>
+                        <div id="resetStatusMobile" class="text-[9px] text-[#ffaa00] font-bold tracking-wider mt-1 opacity-90">PATCH: NONE</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- MASTER CONTROL ROW -->
+            <div class="panel-outline w-full overflow-x-auto grid-scroll mb-8">
+                <div class="flex flex-nowrap items-center justify-between min-w-max gap-6 px-4 pt-8 pb-5 mx-auto h-full">
+                    
+                    <!-- 1. TRANSPORT & CLOCK -->
+                    <div class="flex items-center gap-4 relative">
+                        <span class="absolute -top-6 left-1/2 -translate-x-1/2 text-[8px] font-bold tracking-widest text-[#82796e] whitespace-nowrap">TRANSPORT / CLOCK</span>
+                        
+                        <div class="flex flex-col gap-2 justify-center w-[110px]">
+                            <button id="startStop" class="rocker-button text-white px-3 py-1.5 font-black rounded-sm flex items-center justify-center gap-2 w-full">
+                                <span class="w-1.5 h-1.5 rounded-full bg-red-400 opacity-60" id="rockerLed"></span>
+                                <svg width="16" height="12" viewBox="0 0 20 14" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                                    <polygon points="1,1 9,7 1,13" />
+                                    <rect x="12" y="2" width="7" height="10" />
+                                </svg>
+                            </button>
+                            <div class="flex gap-1.5 w-full">
+                                <button id="stepRev" class="tactile-button py-1 flex items-center justify-center rounded-sm flex-1">
+                                    <svg width="12" height="12" viewBox="0 0 14 14" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                                        <rect x="1" y="2" width="2" height="10" />
+                                        <polygon points="13,1 4,7 13,13" />
+                                    </svg>
+                                </button>
+                                <button id="stepAdv" class="tactile-button py-1 flex items-center justify-center rounded-sm flex-1">
+                                    <svg width="12" height="12" viewBox="0 0 14 14" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                                        <polygon points="1,1 10,7 1,13" />
+                                        <rect x="11" y="2" width="2" height="10" />
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="flex gap-3">
+                            <div class="knob-wrapper">
+                                <div class="tick-container">
+                                    <div class="tick-ring"></div>
+                                    <div class="knob global-knob" id="clockSpeed" data-val="50"></div>
+                                </div>
+                                <span class="text-[9px] font-bold text-[#1f1a14]">SPEED</span>
+                            </div>
+                            <div class="knob-wrapper">
+                                <div class="tick-container">
+                                    <div class="tick-ring"></div>
+                                    <div class="knob global-knob" id="portamento" data-val="0"></div>
+                                </div>
+                                <span class="text-[9px] font-bold text-[#1f1a14]">PORTA</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="panel-divider"></div>
+
+                    <!-- 2. ROUTING & MODE -->
+                    <div class="flex items-center gap-5 relative">
+                        <span class="absolute -top-6 left-1/2 -translate-x-1/2 text-[8px] font-bold tracking-widest text-[#82796e] whitespace-nowrap">ROUTING & MODE</span>
+                        
+                        <div class="flex flex-col items-center gap-1">
+                            <span class="text-[7px] font-bold text-[#1f1a14]">12</span>
+                            <div class="volt-rocker volt-toggle-top" id="lengthRockerBtn">
+                                <div class="volt-rocker-cap"></div>
+                            </div>
+                            <span class="text-[7px] font-bold text-[#1f1a14]">24</span>
+                            <span class="text-[8px] font-bold text-[#1f1a14] mt-0.5">STEPS</span>
+                        </div>
+
+                        <div class="flex flex-col items-center justify-center h-full">
+                            <div class="flex flex-col gap-1" id="playModeBank">
+                                <button class="mode-btn" data-play="step">STEP</button>
+                                <button class="mode-btn mode-active" data-play="cont">CONT</button>
+                                <button class="mode-btn" data-play="one">ONCE</button>
+                            </div>
+                            <span class="text-[8px] font-bold text-[#1f1a14] mt-1.5">MODE</span>
+                        </div>
+
+                        <div class="flex flex-col items-center gap-1">
+                            <span class="text-[7px] font-bold text-[#1f1a14]">&plusmn;5V</span>
+                            <div class="volt-rocker volt-toggle-top" id="voltRockerBtn">
+                                <div class="volt-rocker-cap"></div>
+                            </div>
+                            <span class="text-[7px] font-bold text-[#1f1a14]">&plusmn;1V</span>
+                            <span class="text-[8px] font-bold text-[#1f1a14] mt-0.5">RANGE</span>
+                        </div>
+
+                        <div class="flex flex-col items-center justify-center h-full">
+                            <div class="flex flex-col gap-1" id="chCDestBank">
+                                <button class="dest-btn dest-active" data-dest="filter">VCF</button>
+                                <button class="dest-btn" data-dest="volume">VCA</button>
+                                <button class="dest-btn" data-dest="clock">CLK</button>
+                            </div>
+                            <span class="text-[8px] font-bold text-[#1f1a14] mt-1.5">DEST</span>
+                        </div>
+                    </div>
+
+                    <div class="panel-divider"></div>
+
+                    <!-- 3. OSCILLATOR MODULE -->
+                    <div class="flex items-center gap-4 relative">
+                        <span class="absolute -top-6 left-1/2 -translate-x-1/2 text-[8px] font-bold tracking-widest text-[#82796e] whitespace-nowrap">OSCILLATOR (VCO)</span>
+                        
+                        <div class="flex flex-col items-center justify-center h-full">
+                            <div class="grid grid-cols-2 gap-1 mb-1.5" id="waveBtnBank">
+                                <button class="wave-btn wave-active" data-wave="0" title="Sawtooth">
+                                    <svg width="16" height="12" viewBox="0 0 24 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"><path d="M4 14 L12 2 V14 L20 2 V14" /></svg>
+                                </button>
+                                <button class="wave-btn" data-wave="1" title="Square">
+                                    <svg width="16" height="12" viewBox="0 0 24 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"><path d="M3 14 V4 h8 v10 h8 v-10" /></svg>
+                                </button>
+                                <button class="wave-btn" data-wave="2" title="Triangle">
+                                    <svg width="16" height="12" viewBox="0 0 24 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"><path d="M3 14 L8 2 L16 14 L21 2" /></svg>
+                                </button>
+                                <button class="wave-btn" data-wave="3" title="Sine">
+                                    <svg width="16" height="12" viewBox="0 0 24 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M2 8 C 6 -4, 10 -4, 12 8 C 14 20, 18 20, 22 8" /></svg>
+                                </button>
+                            </div>
+                            <span class="text-[8px] font-bold text-[#1f1a14]">WAVE</span>
+                        </div>
+
+                        <div class="flex flex-col items-center justify-center h-full">
+                            <div class="grid grid-cols-2 gap-1 mb-1.5" id="octaveBtnBank">
+                                <button class="oct-btn" data-oct="0">32'</button>
+                                <button class="oct-btn oct-active" data-oct="1">16'</button>
+                                <button class="oct-btn" data-oct="2">8'</button>
+                                <button class="oct-btn" data-oct="3">4'</button>
+                            </div>
+                            <span class="text-[8px] font-bold text-[#1f1a14]">SCALE</span>
+                        </div>
+
+                        <div class="knob-wrapper">
+                            <div class="tick-container">
+                                <div class="tick-ring"></div>
+                                <span class="tick-label label-left">-12</span>
+                                <span class="tick-label label-top">0</span>
+                                <span class="tick-label label-right">+12</span>
+                                <div class="knob global-knob" id="pitchTuneKnob" data-val="50"></div>
+                            </div>
+                            <span class="text-[9px] font-bold text-[#1f1a14]">PITCH</span>
+                        </div>
+                    </div>
+
+                    <div class="panel-divider"></div>
+
+                    <!-- 4. ADSR ENVELOPE -->
+                    <div class="flex items-center gap-3 relative">
+                        <span class="absolute -top-6 left-1/2 -translate-x-1/2 text-[8px] font-bold tracking-widest text-[#82796e] whitespace-nowrap">ENVELOPE (ADSR)</span>
+                        
+                        <div class="knob-wrapper">
+                            <div class="tick-container">
+                                <div class="tick-ring"></div>
+                                <div class="knob global-knob" id="envAttack" data-val="5"></div>
+                            </div>
+                            <span class="text-[8px] font-bold text-[#1f1a14]">ATK</span>
+                        </div>
+                        <div class="knob-wrapper">
+                            <div class="tick-container">
+                                <div class="tick-ring"></div>
+                                <div class="knob global-knob" id="envDecay" data-val="30"></div>
+                            </div>
+                            <span class="text-[8px] font-bold text-[#1f1a14]">DEC</span>
+                        </div>
+                        <div class="knob-wrapper">
+                            <div class="tick-container">
+                                <div class="tick-ring"></div>
+                                <div class="knob global-knob" id="envSustain" data-val="20"></div>
+                            </div>
+                            <span class="text-[8px] font-bold text-[#1f1a14]">SUS</span>
+                        </div>
+                        <div class="knob-wrapper">
+                            <div class="tick-container">
+                                <div class="tick-ring"></div>
+                                <div class="knob global-knob" id="envRelease" data-val="25"></div>
+                            </div>
+                            <span class="text-[8px] font-bold text-[#1f1a14]">REL</span>
+                        </div>
+                    </div>
+
+                    <div class="panel-divider"></div>
+
+                    <!-- 5. DAW / OUTPUT CONTROLS -->
+                    <div class="flex items-center gap-5 relative pl-1 pr-2">
+                        <span class="absolute -top-6 left-1/2 -translate-x-1/2 text-[8px] font-bold tracking-widest text-[#82796e] whitespace-nowrap">DAW & MIDI</span>
+
+                        <!-- Audio Recording -->
+                        <div class="flex flex-col gap-1.5 items-center justify-center w-[65px]">
+                            <button id="btnRecord" class="tactile-button px-2 py-1.5 rounded text-[9px] font-bold w-full">● REC</button>
+                            <div id="recStatus" class="text-[8px] font-bold text-[#1f1a14] text-center w-full">00:00</div>
+                            <a id="btnDownload" href="#" class="tactile-button px-2 py-1 rounded text-[9px] font-bold w-full text-center opacity-40 pointer-events-none">SAVE</a>
+                        </div>
+
+                        <!-- MIDI Out -->
+                        <div class="flex flex-col gap-1.5 items-center justify-center w-[90px]">
+                            <button id="btnMidi" class="tactile-button px-2 py-1.5 rounded text-[9px] font-bold w-full">MIDI: OFF</button>
+                            <select id="midiOutSelect" class="text-[8px] font-bold text-[#5a544a] bg-[#e2dbc8] border border-[#38342e]/30 rounded px-1 py-1 w-full truncate">
+                                <option>Checking...</option>
+                            </select>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- SEQUENCER GRID -->
+            <div class="panel-outline w-full overflow-x-auto grid-scroll mb-6 !py-8 !px-4">
+                <div class="flex flex-col gap-6 min-w-max mx-auto px-2">
+                    <div class="flex"><div class="row-label"></div><div class="flex gap-4 flex-1" id="ledRow"></div></div>
+                    <div class="flex"><div class="row-label text-[#1f1a14]"><div id="pilotA" class="pilot"></div>CH-A</div><div class="flex gap-4 flex-1" id="rowA"></div></div>
+                    <div class="flex"><div class="row-label text-[#1f1a14]"><div id="pilotB" class="pilot"></div>CH-B</div><div class="flex gap-4 flex-1" id="rowB"></div></div>
+                    <div class="flex"><div class="row-label text-[#1f1a14]">CH-C</div><div class="flex gap-4 flex-1" id="rowC"></div></div>
+                    <div class="flex mt-2"><div class="row-label text-[#1f1a14] text-[10px]">TRIG<br>OUT</div><div class="flex gap-4 flex-1" id="trigRow"></div></div>
+                </div>
+            </div>
+            
+            <!-- FOOTER -->
+            <div class="flex flex-wrap items-center justify-between gap-6 w-full pt-4 border-t-2 border-[#38342e]/30">
+                <div class="flex flex-col gap-1">
+                    <span class="text-[10px] font-bold text-[#1f1a14]">KEYBOARD TRANSPOSE / PREVIEW</span>
+                    <div class="flex relative h-16" id="keyboardContainer"></div>
+                </div>
+
+                <div class="flex flex-col items-end gap-3">
+                    <div class="flex gap-4">
+                        <button id="demo1Btn" class="tactile-button text-[10px] font-bold tracking-widest px-3 py-2 rounded-sm cursor-pointer outline-none">DEMO 1: EBM</button>
+                        <button id="demo2Btn" class="tactile-button text-[10px] font-bold tracking-widest px-3 py-2 rounded-sm cursor-pointer outline-none">DEMO 2: ACID</button>
+                    </div>
+                    
+                    <div class="text-[9px] text-[#38342e] font-mono font-bold tracking-widest text-right mt-1">
+                        &copy; JOSE VELAZQUEZ MA / <a href="https://voltageandwave.co.uk/" target="_blank" rel="noopener noreferrer" class="hover:text-[#c83a2a] underline transition-colors">VOLTAGE &amp; WAVE</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="wooden-ear wooden-ear-right"></div>
+    </div>
+
+    <script>
+        const NUM_STEPS = 12;
+        let currentStep = -1;
+        let isPlaying = false;
+        let nextNoteTime = 0;
+        let timerId;
+        
+        let audioCtx, synthOsc, synthVcf, synthVca, analyser;
+        
+        // DAW State Hooks
+        let recordDestination = null;
+        let mediaRecorder = null;
+        let recordedChunks = [];
+        let isRecording = false;
+        let recordStartTime = 0;
+        let recordTimerInterval = null;
+        
+        let midiAccess = null;
+        let midiOutput = null;
+        let midiEnabled = false;
+        let activePreviewMidiNote = null; 
+
+        let bpm = 120;
+        let portamentoTime = 0.01;
+        let resetStep = null;
+        let isPreviewing = false;
+        let transposeSemitones = 0;
+
+        let currentLength = '12';
+        let currentPlayMode = 'cont'; 
+        let activeSeqMode = '12-cont'; 
+        
+        let voltageRangeMultiplier = 1;
+        let activeChCDest = 'filter';
+
+        const waveforms = ['sawtooth', 'square', 'triangle', 'sine'];
+        let activeWaveform = 'sawtooth';
+        let octaveOffsetSemitones = 0; 
+        let finePitchTuneSemitones = 0; 
+
+        let attackTime = 0.01;   
+        let decayTime = 0.15;    
+        let sustainLevel = 0.2;  
+        let releaseTime = 0.2;   
+
+        const tracks = { A: new Array(NUM_STEPS).fill(0), B: new Array(NUM_STEPS).fill(0), C: new Array(NUM_STEPS).fill(2.5) };
+        const noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+
+        async function initAudio() {
+            if(!audioCtx) {
+                const AudioCtxClass = window.AudioContext || window.webkitAudioContext;
+                audioCtx = new AudioCtxClass();
+                
+                synthOsc = audioCtx.createOscillator();
+                synthVcf = audioCtx.createBiquadFilter();
+                synthVca = audioCtx.createGain();
+                analyser = audioCtx.createAnalyser();
+                
+                synthOsc.type = activeWaveform;
+                synthVcf.type = 'lowpass';
+                synthVcf.Q.value = 12; 
+                synthVca.gain.value = 0;
+                
+                analyser.fftSize = 256;
+
+                synthOsc.connect(synthVcf);
+                synthVcf.connect(synthVca);
+                synthVca.connect(analyser);
+                analyser.connect(audioCtx.destination);
+                
+                // DAW: Route audio to recording stream
+                recordDestination = audioCtx.createMediaStreamDestination();
+                synthVca.connect(recordDestination);
+
+                synthOsc.start();
+                drawScope();
+            }
+            if(audioCtx.state === 'suspended') {
+                await audioCtx.resume();
+            }
+        }
+
+        function drawScope() {
+            requestAnimationFrame(drawScope);
+            if (!analyser) return;
+
+            const bufferLength = analyser.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+            analyser.getByteTimeDomainData(dataArray);
+
+            const canvas = document.getElementById('scopeCanvas');
+            if (canvas) {
+                const ctx = canvas.getContext('2d');
+                ctx.fillStyle = '#041004';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.lineWidth = 1.5;
+                ctx.strokeStyle = '#0f0';
+                ctx.beginPath();
+                const sliceWidth = canvas.width * 1.0 / bufferLength;
+                let x = 0;
+                for(let i = 0; i < bufferLength; i++) {
+                    const v = dataArray[i] / 128.0;
+                    const y = v * canvas.height / 2;
+                    if(i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                    x += sliceWidth;
+                }
+                ctx.lineTo(canvas.width, canvas.height / 2);
+                ctx.stroke();
+            }
+
+            const mCanvas = document.getElementById('scopeCanvasMobile');
+            if (mCanvas && window.innerWidth < 768) {
+                const mCtx = mCanvas.getContext('2d');
+                mCtx.fillStyle = '#041004';
+                mCtx.fillRect(0, 0, mCanvas.width, mCanvas.height);
+                mCtx.lineWidth = 1.5;
+                mCtx.strokeStyle = '#0f0';
+                mCtx.beginPath();
+                const sliceWidthM = mCanvas.width * 1.0 / bufferLength;
+                let xM = 0;
+                for(let i = 0; i < bufferLength; i++) {
+                    const v = dataArray[i] / 128.0;
+                    const y = v * mCanvas.height / 2;
+                    if(i === 0) mCtx.moveTo(xM, y);
+                    else mCtx.lineTo(xM, y);
+                    xM += sliceWidthM;
+                }
+                mCtx.lineTo(mCanvas.width, mCanvas.height / 2);
+                mCtx.stroke();
+            }
+        }
+
+        function updateDisplay(step, volt, ch = 'A') {
+            const stepStr = `STEP: ${step < 0 ? '--' : step + 1}`;
+            const voltStr = `VOLT: ${volt >= 0 ? '+' : ''}${volt.toFixed(2)}`;
+            let noteStr = '';
+
+            if (ch === 'C') {
+                noteStr = `CTRL: C-MOD`;
+            } else {
+                const semitoneOffset = Math.round(volt * 12) + transposeSemitones + octaveOffsetSemitones + Math.round(finePitchTuneSemitones);
+                const totalNote = 24 + semitoneOffset; 
+                const noteIndex = ((totalNote % 12) + 12) % 12;
+                const octave = Math.floor(totalNote / 12);
+                noteStr = `NOTE: ${noteNames[noteIndex]}${octave}`;
+            }
+
+            document.getElementById('dispStep').innerText = stepStr;
+            document.getElementById('dispVolt').innerText = voltStr;
+            document.getElementById('dispNote').innerText = noteStr;
+
+            if (document.getElementById('dispStepMobile')) {
+                document.getElementById('dispStepMobile').innerText = stepStr;
+                document.getElementById('dispVoltMobile').innerText = voltStr;
+                document.getElementById('dispNoteMobile').innerText = noteStr;
+            }
+        }
+
+        let activeKnob = null, startY = 0, startVal = 0;
+
+        function updateKnobVisual(knobEl, val) {
+            if (knobEl.hasAttribute('data-ch')) {
+                const ch = knobEl.dataset.ch;
+                if (ch === 'C') {
+                    knobEl.style.transform = `rotate(${-135 + (val / 5) * 270}deg)`;
+                } else {
+                    knobEl.style.transform = `rotate(${val * 27}deg)`; 
+                }
+            } else {
+                knobEl.style.transform = `rotate(${-135 + (val / 100) * 270}deg)`;
+            }
+        }
+
+        function setWaveform(idx) {
+            activeWaveform = waveforms[idx];
+            if(synthOsc) synthOsc.type = activeWaveform;
+            document.querySelectorAll('#waveBtnBank .wave-btn').forEach(btn => {
+                btn.classList.toggle('wave-active', parseInt(btn.dataset.wave) === idx);
+            });
+        }
+
+        document.querySelectorAll('#waveBtnBank .wave-btn').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                await initAudio();
+                setWaveform(parseInt(e.currentTarget.dataset.wave));
+            });
+        });
+
+        function setOctave(octIdx) {
+            octaveOffsetSemitones = (octIdx - 1) * 12;
+            document.querySelectorAll('#octaveBtnBank .oct-btn').forEach(btn => {
+                btn.classList.toggle('oct-active', parseInt(btn.dataset.oct) === octIdx);
+            });
+        }
+
+        document.querySelectorAll('#octaveBtnBank .oct-btn').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                await initAudio();
+                setOctave(parseInt(e.target.dataset.oct));
+            });
+        });
+
+        function updateActiveMode() { activeSeqMode = `${currentLength}-${currentPlayMode}`; }
+
+        document.getElementById('lengthRockerBtn').addEventListener('click', async (e) => {
+            await initAudio();
+            const btn = e.currentTarget;
+            if (btn.classList.contains('volt-toggle-top')) {
+                btn.classList.replace('volt-toggle-top', 'volt-toggle-bottom');
+                currentLength = '24';
+            } else {
+                btn.classList.replace('volt-toggle-bottom', 'volt-toggle-top');
+                currentLength = '12';
+            }
+            updateActiveMode();
+        });
+
+        document.querySelectorAll('#playModeBank .mode-btn').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                await initAudio();
+                currentPlayMode = e.target.dataset.play;
+                document.querySelectorAll('#playModeBank .mode-btn').forEach(b => {
+                    b.classList.toggle('mode-active', b.dataset.play === currentPlayMode);
+                });
+                updateActiveMode();
+            });
+        });
+
+        document.getElementById('voltRockerBtn').addEventListener('click', async (e) => {
+            await initAudio();
+            const btn = e.currentTarget;
+            if (btn.classList.contains('volt-toggle-top')) {
+                btn.classList.replace('volt-toggle-top', 'volt-toggle-bottom');
+                voltageRangeMultiplier = 0.2;
+            } else {
+                btn.classList.replace('volt-toggle-bottom', 'volt-toggle-top');
+                voltageRangeMultiplier = 1;
+            }
+        });
+
+        document.querySelectorAll('#chCDestBank .dest-btn').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                await initAudio();
+                activeChCDest = e.target.dataset.dest;
+                document.querySelectorAll('#chCDestBank .dest-btn').forEach(b => {
+                    b.classList.toggle('dest-active', b.dataset.dest === activeChCDest);
+                });
+            });
+        });
+
+        function previewSynth(pitchVal, cVal, retrigger = false) {
+            if(!audioCtx) return;
+            const semitone = (pitchVal * 12) + transposeSemitones + octaveOffsetSemitones + finePitchTuneSemitones; 
+            const freq = 65.41 * Math.pow(2, semitone / 12); 
+
+            synthOsc.type = activeWaveform;
+            synthOsc.frequency.setTargetAtTime(freq, audioCtx.currentTime, portamentoTime);
+
+            let baseCutoff = 400; 
+            let peakVolume = 0.8;
+            const normalizedC = cVal / 5; 
+
+            if (activeChCDest === 'filter') {
+                baseCutoff = 100 + (normalizedC * 3000);
+            } else if (activeChCDest === 'volume') {
+                peakVolume = 0.1 + (normalizedC * 0.9); 
+            }
+
+            const now = audioCtx.currentTime;
+
+            // DAW MIDI Support during keyboard preview
+            if (midiEnabled && midiOutput) {
+                let midiNote = 36 + Math.round(semitone);
+                midiNote = Math.max(0, Math.min(127, midiNote));
+                if (retrigger || !isPreviewing) {
+                    if (activePreviewMidiNote !== null) midiOutput.send([0x80, activePreviewMidiNote, 0]);
+                    midiOutput.send([0x90, midiNote, 100]);
+                    activePreviewMidiNote = midiNote;
+                }
+            }
+
+            if (retrigger || !isPreviewing) {
+                synthVcf.frequency.cancelScheduledValues(now);
+                synthVcf.frequency.setValueAtTime(baseCutoff, now); 
+                synthVcf.frequency.linearRampToValueAtTime(baseCutoff + 5000, now + attackTime);
+                synthVcf.frequency.exponentialRampToValueAtTime(Math.max(100, baseCutoff + (5000 * sustainLevel)), now + attackTime + decayTime);
+
+                synthVca.gain.cancelScheduledValues(now);
+                synthVca.gain.setValueAtTime(synthVca.gain.value || 0, now);
+                synthVca.gain.linearRampToValueAtTime(peakVolume, now + attackTime);
+                synthVca.gain.linearRampToValueAtTime(peakVolume * sustainLevel, now + attackTime + decayTime);
+                
+                isPreviewing = true;
+            } else {
+                synthVcf.frequency.setTargetAtTime(baseCutoff + (5000 * sustainLevel), now, 0.05);
+                synthVca.gain.setTargetAtTime(peakVolume * sustainLevel, now, 0.05);
+            }
+        }
+
+        function stopPreview() {
+            if (midiEnabled && midiOutput && activePreviewMidiNote !== null) {
+                midiOutput.send([0x80, activePreviewMidiNote, 0]);
+                activePreviewMidiNote = null;
+            }
+
+            if (isPreviewing && audioCtx) {
+                const now = audioCtx.currentTime;
+                synthVca.gain.cancelScheduledValues(now);
+                const currentGain = Math.max(0.001, synthVca.gain.value);
+                synthVca.gain.setValueAtTime(currentGain, now);
+                synthVca.gain.exponentialRampToValueAtTime(0.0001, now + releaseTime);
+                isPreviewing = false;
+            }
+        }
+
+        document.addEventListener('pointerdown', async (e) => {
+            if (e.target.classList.contains('knob')) {
+                await initAudio();
+                activeKnob = e.target;
+                if (activeKnob.setPointerCapture) activeKnob.setPointerCapture(e.pointerId);
+                startY = e.clientY;
+                startVal = parseFloat(activeKnob.dataset.val);
+                
+                if (activeKnob.hasAttribute('data-step')) {
+                    const ch = activeKnob.dataset.ch;
+                    const uiStep = parseInt(activeKnob.dataset.step);
+                    const is24 = activeSeqMode.startsWith('24');
+                    const stepIdx = uiStep + (ch === 'B' && is24 ? 12 : 0);
+                    
+                    let displayVal = parseFloat(activeKnob.dataset.val);
+                    if (ch === 'A' || ch === 'B') displayVal *= voltageRangeMultiplier;
+                    
+                    updateDisplay(stepIdx, displayVal, ch);
+                    
+                    if (!isPlaying) {
+                        let pVal = is24 ? (stepIdx < 12 ? tracks.A[uiStep] : tracks.B[uiStep]) : tracks.A[uiStep];
+                        pVal *= voltageRangeMultiplier;
+                        let fVal = tracks.C[uiStep];
+                        previewSynth(pVal, fVal, true);
+                    }
+                }
+            }
+        });
+
+        document.addEventListener('pointermove', (e) => {
+            if (activeKnob) {
+                let isSeqKnob = activeKnob.hasAttribute('data-ch');
+
+                if (isSeqKnob) {
+                    const ch = activeKnob.dataset.ch;
+                    let newVal;
+                    if (ch === 'C') newVal = Math.max(0, Math.min(5, startVal + (startY - e.clientY) * 0.025));
+                    else newVal = Math.max(-5, Math.min(5, startVal + (startY - e.clientY) * 0.05));
+                    
+                    tracks[ch][activeKnob.dataset.step] = newVal;
+                    
+                    const uiStep = parseInt(activeKnob.dataset.step);
+                    const is24 = activeSeqMode.startsWith('24');
+                    const stepIdx = uiStep + (ch === 'B' && is24 ? 12 : 0);
+                    
+                    let displayVal = newVal;
+                    if (ch === 'A' || ch === 'B') displayVal *= voltageRangeMultiplier;
+                    
+                    updateDisplay(stepIdx, displayVal, ch);
+                    
+                    if (!isPlaying && isPreviewing) {
+                        let pVal = is24 ? (stepIdx < 12 ? tracks.A[uiStep] : tracks.B[uiStep]) : tracks.A[uiStep];
+                        pVal *= voltageRangeMultiplier;
+                        let fVal = tracks.C[uiStep];
+                        previewSynth(pVal, fVal, false);
+                    }
+                    activeKnob.dataset.val = newVal;
+                } else {
+                    let newVal = Math.max(0, Math.min(100, startVal + (startY - e.clientY)));
+                    
+                    if(activeKnob.id === 'clockSpeed') {
+                        bpm = 40 + (newVal / 100) * 200;
+                    } else if(activeKnob.id === 'portamento') {
+                        portamentoTime = 0.01 + (newVal / 100) * 0.3;
+                    } else if(activeKnob.id === 'pitchTuneKnob') {
+                        finePitchTuneSemitones = -12 + (newVal / 100) * 24;
+                    } else if(activeKnob.id === 'envAttack') {
+                        attackTime = 0.005 + (newVal / 100) * 0.5;
+                    } else if(activeKnob.id === 'envDecay') {
+                        decayTime = 0.02 + (newVal / 100) * 0.8;
+                    } else if(activeKnob.id === 'envSustain') {
+                        sustainLevel = newVal / 100;
+                    } else if(activeKnob.id === 'envRelease') {
+                        releaseTime = 0.02 + (newVal / 100) * 1.5;
+                    }
+                    activeKnob.dataset.val = newVal;
+                }
+                updateKnobVisual(activeKnob, activeKnob.dataset.val);
+            }
+        });
+
+        const endDrag = (e) => {
+            if (activeKnob) {
+                if (activeKnob.releasePointerCapture && e.pointerId) {
+                    try { activeKnob.releasePointerCapture(e.pointerId); } catch(err){}
+                }
+                activeKnob = null;
+                stopPreview();
+            }
+        };
+        document.addEventListener('pointerup', endDrag);
+        document.addEventListener('pointercancel', endDrag);
+
+        function triggerSynth(pitchVal, cVal, time) {
+            if(!audioCtx) return;
+            const semitone = (pitchVal * 12) + transposeSemitones + octaveOffsetSemitones + finePitchTuneSemitones; 
+            const freq = 65.41 * Math.pow(2, semitone / 12); 
+            const stepGateTime = Math.max(0.05, ((60.0 / bpm) * 0.25) - 0.02);
+
+            // DAW MIDI scheduling
+            if (midiEnabled && midiOutput) {
+                let midiNote = 36 + Math.round(semitone);
+                midiNote = Math.max(0, Math.min(127, midiNote));
+                
+                let velocity = 100;
+                if (activeChCDest === 'volume') velocity = Math.max(1, Math.min(127, Math.round((cVal / 5) * 127)));
+
+                const timeOffset = (time - audioCtx.currentTime) * 1000;
+                const midiTime = performance.now() + timeOffset;
+                const noteEndTime = midiTime + (stepGateTime * 1000);
+
+                midiOutput.send([0x90, midiNote, velocity], midiTime);
+                midiOutput.send([0x80, midiNote, 0], noteEndTime);
+            }
+
+            synthOsc.type = activeWaveform;
+            synthOsc.frequency.setTargetAtTime(freq, time, portamentoTime);
+
+            let baseCutoff = 400; 
+            let peakVolume = 0.8;
+            const normalizedC = cVal / 5; 
+
+            if (activeChCDest === 'filter') {
+                baseCutoff = 100 + (normalizedC * 3000);
+            } else if (activeChCDest === 'volume') {
+                peakVolume = 0.1 + (normalizedC * 0.9); 
+            }
+
+            synthVcf.frequency.cancelScheduledValues(time);
+            synthVcf.frequency.setValueAtTime(baseCutoff, time); 
+            synthVcf.frequency.linearRampToValueAtTime(baseCutoff + 5000, time + attackTime);
+            synthVcf.frequency.exponentialRampToValueAtTime(Math.max(100, baseCutoff + (5000 * sustainLevel)), time + attackTime + decayTime);
+
+            synthVca.gain.cancelScheduledValues(time);
+            synthVca.gain.setValueAtTime(0, time);
+            
+            synthVca.gain.linearRampToValueAtTime(peakVolume, time + attackTime);
+            synthVca.gain.linearRampToValueAtTime(peakVolume * sustainLevel, time + attackTime + decayTime);
+            const noteEndTime = time + stepGateTime;
+            synthVca.gain.setValueAtTime(peakVolume * sustainLevel, noteEndTime);
+            synthVca.gain.exponentialRampToValueAtTime(0.001, noteEndTime + releaseTime);
+        }
+
+        async function handlePatchClick(e) {
+            await initAudio();
+            const step = parseInt(e.target.dataset.step);
+            const statusTextDesktop = document.getElementById('resetStatus');
+            const statusTextMobile = document.getElementById('resetStatusMobile');
+            const is24 = activeSeqMode.startsWith('24');
+
+            let txt = "PATCH: NONE";
+
+            if (resetStep === step) {
+                if (is24) {
+                    resetStep = step + 12;
+                    e.target.classList.remove('patched');
+                    e.target.classList.add('patched-b');
+                    txt = `EXT: STEP ${resetStep + 1}`;
+                } else {
+                    resetStep = null;
+                    e.target.classList.remove('patched', 'patched-b');
+                }
+            } else if (resetStep === step + 12) {
+                resetStep = null;
+                e.target.classList.remove('patched-b');
+            } else {
+                document.querySelectorAll('.patch-point').forEach(el => el.classList.remove('patched', 'patched-b'));
+                resetStep = step;
+                e.target.classList.add('patched');
+                txt = `RESET: STEP ${step + 1}`;
+            }
+
+            if (statusTextDesktop) statusTextDesktop.innerText = txt;
+            if (statusTextMobile) statusTextMobile.innerText = txt;
+        }
+
+        function renderGrid() {
+            ['ledRow', 'rowA', 'rowB', 'rowC', 'trigRow'].forEach(id => document.getElementById(id).innerHTML = '');
+            for(let i=0; i<NUM_STEPS; i++) {
+                document.getElementById('ledRow').innerHTML += `<div class="w-[56px] flex justify-center step-indicator" data-step="${i}"><div class="led"></div></div>`;
+                
+                ['A', 'B', 'C'].forEach(ch => {
+                    const isBipolar = (ch === 'A' || ch === 'B');
+                    const defaultVal = isBipolar ? 0 : 2.5; 
+                    const labelsHTML = isBipolar ? 
+                        `<span class="tick-label label-left">-5</span><span class="tick-label label-top">0</span><span class="tick-label label-right">+5</span>` : 
+                        `<span class="tick-label label-left">0</span><span class="tick-label label-right">+5</span>`;
+
+                    document.getElementById(`row${ch}`).innerHTML += `
+                        <div class="knob-wrapper">
+                            <div class="tick-container">
+                                <div class="tick-ring"></div>
+                                ${labelsHTML}
+                                <div class="knob" data-ch="${ch}" data-step="${i}" data-val="${defaultVal}"></div>
+                            </div>
+                        </div>`;
+                });
+                
+                const patchPoint = document.createElement('div');
+                patchPoint.className = 'patch-point';
+                patchPoint.dataset.step = i;
+                patchPoint.addEventListener('click', handlePatchClick);
+                
+                const patchContainer = document.createElement('div');
+                patchContainer.className = 'w-[56px] flex justify-center';
+                patchContainer.appendChild(patchPoint);
+                document.getElementById('trigRow').appendChild(patchContainer);
+            }
+            
+            document.querySelectorAll('.knob[data-ch]').forEach(k => {
+                const ch = k.dataset.ch;
+                const val = (ch === 'C') ? 2.5 : 0;
+                updateKnobVisual(k, val);
+            });
+            updateKnobVisual(document.getElementById('clockSpeed'), 50);
+            updateKnobVisual(document.getElementById('portamento'), 0);
+            updateKnobVisual(document.getElementById('pitchTuneKnob'), 50);
+            updateKnobVisual(document.getElementById('envAttack'), 5);
+            updateKnobVisual(document.getElementById('envDecay'), 30);
+            updateKnobVisual(document.getElementById('envSustain'), 20);
+            updateKnobVisual(document.getElementById('envRelease'), 25);
+            
+            setOctave(1);
+            setWaveform(0);
+        }
+
+        function renderKeyboard() {
+            const container = document.getElementById('keyboardContainer');
+            container.innerHTML = '';
+            
+            const keys = [
+                { note: 'C', isBlack: false, offset: 0 }, { note: 'C#', isBlack: true, offset: 1 },
+                { note: 'D', isBlack: false, offset: 2 }, { note: 'D#', isBlack: true, offset: 3 },
+                { note: 'E', isBlack: false, offset: 4 }, { note: 'F', isBlack: false, offset: 5 },
+                { note: 'F#', isBlack: true, offset: 6 }, { note: 'G', isBlack: false, offset: 7 },
+                { note: 'G#', isBlack: true, offset: 8 }, { note: 'A', isBlack: false, offset: 9 },
+                { note: 'A#', isBlack: true, offset: 10 }, { note: 'B', isBlack: false, offset: 11 },
+                { note: 'C', isBlack: false, offset: 12 }
+            ];
+
+            let whiteIndex = 0;
+            keys.forEach(k => {
+                const btn = document.createElement('button');
+                btn.dataset.offset = k.offset;
+                
+                if (k.isBlack) {
+                    btn.className = `key-black absolute w-5 h-10 text-[8px] font-bold flex items-end justify-center pb-1 ${k.offset === transposeSemitones ? 'active-key' : ''}`;
+                    btn.style.left = `${(whiteIndex * 24) - 10}px`;
+                } else {
+                    btn.className = `key-white w-6 h-16 text-[9px] font-bold flex items-end justify-center pb-1 ${k.offset === transposeSemitones ? 'active-key' : ''}`;
+                    whiteIndex++;
+                }
+                
+                btn.innerText = k.note;
+                btn.addEventListener('pointerdown', async (e) => {
+                    await initAudio();
+                    transposeSemitones = parseInt(e.target.dataset.offset);
+                    
+                    document.querySelectorAll('#keyboardContainer button').forEach(el => el.classList.remove('active-key'));
+                    e.target.classList.add('active-key');
+                    
+                    let pVal = tracks.A[0] * voltageRangeMultiplier;
+                    
+                    const totalSemitone = Math.round(pVal * 12) + transposeSemitones + octaveOffsetSemitones + Math.round(finePitchTuneSemitones);
+                    const totalNote = 24 + totalSemitone; 
+                    const noteIndex = ((totalNote % 12) + 12) % 12;
+                    const octave = Math.floor(totalNote / 12);
+                    const noteStr = `NOTE: ${noteNames[noteIndex]}${octave}`;
+
+                    document.getElementById('dispStep').innerText = 'STEP: KB';
+                    document.getElementById('dispVolt').innerText = `VOLT: ${pVal >= 0 ? '+' : ''}${pVal.toFixed(2)}`;
+                    document.getElementById('dispNote').innerText = noteStr;
+
+                    if (document.getElementById('dispStepMobile')) {
+                        document.getElementById('dispStepMobile').innerText = 'STEP: KB';
+                        document.getElementById('dispVoltMobile').innerText = `VOLT: ${pVal >= 0 ? '+' : ''}${pVal.toFixed(2)}`;
+                        document.getElementById('dispNoteMobile').innerText = noteStr;
+                    }
+
+                    if (!isPlaying) {
+                        let fVal = tracks.C[0];
+                        previewSynth(pVal, fVal, true);
+                    }
+                });
+
+                btn.addEventListener('pointerup', () => stopPreview());
+                btn.addEventListener('pointercancel', () => stopPreview());
+                container.appendChild(btn);
+            });
+        }
+
+        function stopSequencer() {
+            isPlaying = false;
+            clearTimeout(timerId);
+            currentStep = -1;
+            document.querySelectorAll('.step-indicator').forEach(el => el.classList.remove('active'));
+            document.getElementById('pilotA').classList.remove('pilot-active');
+            document.getElementById('pilotB').classList.remove('pilot-active');
+            
+            const startBtn = document.getElementById('startStop');
+            startBtn.classList.remove('is-active');
+            document.getElementById('rockerLed').classList.replace('bg-red-200', 'bg-red-400');
+            document.getElementById('rockerLed').classList.replace('opacity-100', 'opacity-60');
+            
+            updateDisplay(-1, 0);
+        }
+
+        function updateUIForStep(is24) {
+            const uiStep = currentStep % 12;
+
+            document.querySelectorAll('.step-indicator').forEach(el => el.classList.remove('active'));
+            document.querySelector(`.step-indicator[data-step="${uiStep}"]`).classList.add('active');
+
+            document.getElementById('pilotA').classList.remove('pilot-active');
+            document.getElementById('pilotB').classList.remove('pilot-active');
+            
+            if (is24) {
+                if (currentStep < 12) document.getElementById('pilotA').classList.add('pilot-active');
+                else document.getElementById('pilotB').classList.add('pilot-active');
+            } else {
+                document.getElementById('pilotA').classList.add('pilot-active');
+                document.getElementById('pilotB').classList.add('pilot-active');
+            }
+
+            let pVal = is24 ? (currentStep < 12 ? tracks.A[uiStep] : tracks.B[uiStep]) : tracks.A[uiStep];
+            pVal *= voltageRangeMultiplier;
+            updateDisplay(currentStep, pVal);
+        }
+
+        function scheduleNextStep(manual = false, direction = 1) {
+            const is24 = activeSeqMode.startsWith('24');
+            const maxSteps = is24 ? 24 : 12;
+            
+            if (direction === 1) {
+                currentStep++;
+                if (currentStep >= maxSteps) {
+                    if (activeSeqMode.endsWith('one') && !manual) { stopSequencer(); return; }
+                    currentStep = 0;
+                }
+                
+                if (resetStep !== null) {
+                    const hardwareMatch = (resetStep < 12) && ((currentStep % 12) === resetStep);
+                    const absoluteMatch = (resetStep >= 12) && (currentStep === resetStep);
+                    
+                    if (hardwareMatch || absoluteMatch) {
+                        if (activeSeqMode.endsWith('one') && !manual) { stopSequencer(); return; }
+                        currentStep = 0;
+                    }
+                }
+            } else {
+                currentStep--;
+                if (currentStep < 0) {
+                    if (resetStep !== null) currentStep = resetStep - 1;
+                    else currentStep = maxSteps - 1;
+                }
+            }
+            
+            updateUIForStep(is24);
+
+            const uiStep = currentStep % 12;
+            let pVal = is24 ? (currentStep < 12 ? tracks.A[uiStep] : tracks.B[uiStep]) : tracks.A[uiStep];
+            pVal *= voltageRangeMultiplier;
+            let fVal = tracks.C[uiStep]; 
+
+            triggerSynth(pVal, fVal, manual ? audioCtx.currentTime : nextNoteTime);
+        }
+
+        async function scheduler() {
+            if(!isPlaying || activeSeqMode.endsWith('step')) return; 
+            
+            if(audioCtx && audioCtx.state === 'suspended') await audioCtx.resume();
+
+            while (nextNoteTime < audioCtx.currentTime + 0.1) {
+                scheduleNextStep(false, 1);
+                
+                let currentStepDuration = (60.0 / bpm) * 0.25;
+                if (activeChCDest === 'clock') {
+                    const uiStep = currentStep === -1 ? 0 : currentStep % 12;
+                    const cMod = tracks.C[uiStep] / 2.5; 
+                    currentStepDuration = currentStepDuration * Math.max(0.1, (2.1 - cMod)); 
+                }
+                nextNoteTime += currentStepDuration; 
+            }
+            timerId = setTimeout(scheduler, 25);
+        }
+
+        document.getElementById('startStop').addEventListener('click', async (e) => {
+            await initAudio();
+            const btn = e.currentTarget;
+            const led = document.getElementById('rockerLed');
+            
+            if(isPlaying) {
+                stopSequencer();
+            } else if (!activeSeqMode.endsWith('step')) { 
+                isPlaying = true;
+                btn.classList.add('is-active');
+                led.classList.replace('bg-red-400', 'bg-red-200');
+                led.classList.replace('opacity-60', 'opacity-100');
+                nextNoteTime = audioCtx.currentTime + 0.05;
+                scheduler();
+            }
+        });
+
+        document.getElementById('stepAdv').addEventListener('click', async () => { await initAudio(); scheduleNextStep(true, 1); });
+        document.getElementById('stepRev').addEventListener('click', async () => { await initAudio(); scheduleNextStep(true, -1); });
+
+        // --- DAW Hook Integration ---
+        const btnRecord = document.getElementById('btnRecord');
+        const recStatus = document.getElementById('recStatus');
+        const btnDownload = document.getElementById('btnDownload');
+        const btnMidi = document.getElementById('btnMidi');
+        const midiOutSelect = document.getElementById('midiOutSelect');
+
+        // Recording to a local WAV file (MediaRecorder + re-encode)
+        if (typeof MediaRecorder === 'undefined') {
+            btnRecord.disabled = true;
+            btnRecord.innerText = 'REC N/A';
+            btnRecord.classList.add('opacity-40');
+            recStatus.innerText = 'Unsupported browser';
+        } else {
+            btnRecord.addEventListener('click', async () => {
+                await initAudio();
+
+                if (!isRecording) {
+                    recordedChunks = [];
+                    let options;
+                    if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) options = { mimeType: 'audio/webm;codecs=opus' };
+                    else if (MediaRecorder.isTypeSupported('audio/webm')) options = { mimeType: 'audio/webm' };
+                    mediaRecorder = new MediaRecorder(recordDestination.stream, options);
+
+                    mediaRecorder.ondataavailable = (e) => {
+                        if (e.data && e.data.size > 0) recordedChunks.push(e.data);
+                    };
+
+                    mediaRecorder.onstop = async () => {
+                        recStatus.innerText = 'Encoding...';
+                        const rawBlob = new Blob(recordedChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
+                        try {
+                            const arrayBuffer = await rawBlob.arrayBuffer();
+                            const decoded = await audioCtx.decodeAudioData(arrayBuffer);
+                            const wavBlob = audioBufferToWav(decoded);
+                            btnDownload.href = URL.createObjectURL(wavBlob);
+                            btnDownload.download = recordingFilename('wav');
+                        } catch (err) {
+                            btnDownload.href = URL.createObjectURL(rawBlob);
+                            btnDownload.download = recordingFilename('webm');
+                        }
+                        btnDownload.classList.remove('opacity-40', 'pointer-events-none');
+                        recStatus.innerText = '00:00';
+                    };
+
+                    mediaRecorder.start();
+                    isRecording = true;
+                    recordStartTime = Date.now();
+                    btnRecord.classList.add('active-toggle');
+                    btnRecord.innerText = '■ STOP';
+                    btnDownload.classList.add('opacity-40', 'pointer-events-none');
+
+                    recordTimerInterval = setInterval(() => {
+                        const elapsed = Math.floor((Date.now() - recordStartTime) / 1000);
+                        const mm = String(Math.floor(elapsed / 60)).padStart(2, '0');
+                        const ss = String(elapsed % 60).padStart(2, '0');
+                        recStatus.innerText = `${mm}:${ss}`;
+                    }, 500);
+                } else {
+                    mediaRecorder.stop();
+                    isRecording = false;
+                    clearInterval(recordTimerInterval);
+                    btnRecord.classList.remove('active-toggle');
+                    btnRecord.innerText = '● REC';
+                }
+            });
+        }
+
+        function audioBufferToWav(buffer) {
+            const numChannels = buffer.numberOfChannels;
+            const sampleRate = buffer.sampleRate;
+            const samples = numChannels === 2
+                ? interleaveChannels(buffer.getChannelData(0), buffer.getChannelData(1))
+                : buffer.getChannelData(0);
+
+            const bytesPerSample = 2;
+            const blockAlign = numChannels * bytesPerSample;
+            const dataSize = samples.length * bytesPerSample;
+            const arrayBuffer = new ArrayBuffer(44 + dataSize);
+            const view = new DataView(arrayBuffer);
+
+            writeAscii(view, 0, 'RIFF');
+            view.setUint32(4, 36 + dataSize, true);
+            writeAscii(view, 8, 'WAVE');
+            writeAscii(view, 12, 'fmt ');
+            view.setUint32(16, 16, true);
+            view.setUint16(20, 1, true);
+            view.setUint16(22, numChannels, true);
+            view.setUint32(24, sampleRate, true);
+            view.setUint32(28, sampleRate * blockAlign, true);
+            view.setUint16(32, blockAlign, true);
+            view.setUint16(34, 16, true);
+            writeAscii(view, 36, 'data');
+            view.setUint32(40, dataSize, true);
+
+            let offset = 44;
+            for (let i = 0; i < samples.length; i++, offset += 2) {
+                const s = Math.max(-1, Math.min(1, samples[i]));
+                view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+            }
+            return new Blob([view], { type: 'audio/wav' });
+        }
+
+        function interleaveChannels(left, right) {
+            const result = new Float32Array(left.length + right.length);
+            let idx = 0;
+            for (let i = 0; i < left.length; i++) {
+                result[idx++] = left[i];
+                result[idx++] = right[i];
+            }
+            return result;
+        }
+
+        function writeAscii(view, offset, text) { for (let i = 0; i < text.length; i++) view.setUint8(offset + i, text.charCodeAt(i)); }
+
+        function recordingFilename(ext) {
+            const d = new Date();
+            const pad = (n) => String(n).padStart(2, '0');
+            const stamp = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}_${pad(d.getHours())}-${pad(d.getMinutes())}-${pad(d.getSeconds())}`;
+            return `sq12-recording-${stamp}.${ext}`;
+        }
+
+        function populateMidiOutputs() {
+            const outputs = Array.from(midiAccess.outputs.values());
+            midiOutSelect.innerHTML = '';
+            if (outputs.length === 0) {
+                const opt = document.createElement('option');
+                opt.innerText = 'No MIDI outputs';
+                midiOutSelect.appendChild(opt);
+                midiOutput = null;
+                return;
+            }
+            outputs.forEach((out) => {
+                const opt = document.createElement('option');
+                opt.value = out.id;
+                opt.innerText = out.name;
+                midiOutSelect.appendChild(opt);
+            });
+            if (!midiOutput || !outputs.find(o => o.id === midiOutput.id)) midiOutput = outputs[0];
+            midiOutSelect.value = midiOutput.id;
+        }
+
+        midiOutSelect.addEventListener('change', () => {
+            if (!midiAccess) return;
+            midiOutput = midiAccess.outputs.get(midiOutSelect.value) || null;
+        });
+
+        btnMidi.addEventListener('click', () => {
+            midiEnabled = !midiEnabled;
+            btnMidi.classList.toggle('active-toggle', midiEnabled);
+            btnMidi.innerText = `MIDI: ${midiEnabled ? 'ON' : 'OFF'}`;
+            if (!midiEnabled && activePreviewMidiNote !== null) {
+                if(midiOutput) midiOutput.send([0x80, activePreviewMidiNote, 0]);
+                activePreviewMidiNote = null;
+            }
+        });
+
+        async function initMidi() {
+            if (!navigator.requestMIDIAccess) {
+                btnMidi.disabled = true;
+                btnMidi.innerText = 'MIDI N/A';
+                btnMidi.classList.add('opacity-40');
+                midiOutSelect.innerHTML = '<option>Not supported</option>';
+                midiOutSelect.disabled = true;
+                return;
+            }
+            try {
+                midiAccess = await navigator.requestMIDIAccess();
+                populateMidiOutputs();
+                midiAccess.onstatechange = populateMidiOutputs;
+            } catch (err) {
+                btnMidi.disabled = true;
+                btnMidi.innerText = 'DENIED';
+                btnMidi.classList.add('opacity-40');
+                midiOutSelect.innerHTML = '<option>Permission denied</option>';
+            }
+        }
+        initMidi();
+
+        // --- Demo Data ---
+        document.getElementById('demo1Btn').addEventListener('click', async () => {
+            await initAudio();
+            voltageRangeMultiplier = 1;
+            document.getElementById('voltRockerBtn').className = "volt-rocker volt-toggle-top";
+
+            currentLength = '24'; currentPlayMode = 'cont'; updateActiveMode();
+            document.getElementById('lengthRockerBtn').className = "volt-rocker volt-toggle-bottom";
+            document.querySelectorAll('#playModeBank .mode-btn').forEach(b => b.classList.toggle('mode-active', b.dataset.play === 'cont'));
+
+            activeChCDest = 'filter';
+            document.querySelectorAll('#chCDestBank .dest-btn').forEach(b => b.classList.toggle('dest-active', b.dataset.dest === 'filter'));
+
+            setOctave(1); setWaveform(0); finePitchTuneSemitones = 0;
+            attackTime = 0.01; decayTime = 0.15; sustainLevel = 0.2; releaseTime = 0.2;
+            
+            const dafA = [-0.58, -1.00, 0.25, -1.00, 0.00, -1.00, -1.00, 0.00, -1.00, 0.00, -1.00, 0.00];
+            const dafB = [-0.17, -1.00, 0.00, -1.00, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00];
+
+            for(let i=0; i<12; i++) {
+                tracks.A[i] = dafA[i]; tracks.B[i] = dafB[i]; tracks.C[i] = 2.5;
+                let knobA = document.querySelector(`.knob[data-ch="A"][data-step="${i}"]`);
+                let knobB = document.querySelector(`.knob[data-ch="B"][data-step="${i}"]`);
+                let knobC = document.querySelector(`.knob[data-ch="C"][data-step="${i}"]`);
+                knobA.dataset.val = dafA[i]; knobB.dataset.val = dafB[i]; knobC.dataset.val = 2.5;
+                updateKnobVisual(knobA, dafA[i]); updateKnobVisual(knobB, dafB[i]); updateKnobVisual(knobC, 2.5);
+            }
+            
+            const speedKnob = document.getElementById('clockSpeed');
+            speedKnob.dataset.val = 35; bpm = 40 + (35 / 100) * 200; updateKnobVisual(speedKnob, 35);
+
+            const portaKnob = document.getElementById('portamento');
+            portaKnob.dataset.val = 0; portamentoTime = 0.01; updateKnobVisual(portaKnob, 0);
+
+            updateKnobVisual(document.getElementById('pitchTuneKnob'), 50);
+            updateKnobVisual(document.getElementById('envAttack'), 5); updateKnobVisual(document.getElementById('envDecay'), 30);
+            updateKnobVisual(document.getElementById('envSustain'), 20); updateKnobVisual(document.getElementById('envRelease'), 25);
+
+            resetStep = 16; 
+            document.querySelectorAll('.patch-point').forEach(el => el.classList.remove('patched', 'patched-b'));
+            const targetPatch = document.querySelector('.patch-point[data-step="4"]');
+            if (targetPatch) targetPatch.classList.add('patched-b');
+
+            if (document.getElementById('resetStatus')) document.getElementById('resetStatus').innerText = "EXT: STEP 17";
+            if (document.getElementById('resetStatusMobile')) document.getElementById('resetStatusMobile').innerText = "EXT: STEP 17";
+        });
+
+        document.getElementById('demo2Btn').addEventListener('click', async () => {
+            await initAudio();
+            voltageRangeMultiplier = 1;
+            document.getElementById('voltRockerBtn').className = "volt-rocker volt-toggle-top";
+
+            currentLength = '12'; currentPlayMode = 'cont'; updateActiveMode();
+            document.getElementById('lengthRockerBtn').className = "volt-rocker volt-toggle-top";
+            document.querySelectorAll('#playModeBank .mode-btn').forEach(b => b.classList.toggle('mode-active', b.dataset.play === 'cont'));
+
+            activeChCDest = 'filter';
+            document.querySelectorAll('#chCDestBank .dest-btn').forEach(b => b.classList.toggle('dest-active', b.dataset.dest === 'filter'));
+
+            setOctave(1); setWaveform(0); finePitchTuneSemitones = 0;
+            attackTime = 0.005; decayTime = 0.12; sustainLevel = 0.1; releaseTime = 0.08;
+            
+            const acidA = [-1.00, 0.00, 0.25, -1.00, 0.58, 0.00, -0.17, -1.00, 0.83, 1.00, 0.00, -1.00];
+            const acidC = [4.00, 1.00, 2.50, 4.50, 0.50, 2.50, 3.50, 2.00, 5.00, 0.20, 2.50, 3.00];
+
+            for(let i=0; i<12; i++) {
+                tracks.A[i] = acidA[i]; tracks.B[i] = 0; tracks.C[i] = acidC[i];
+                let knobA = document.querySelector(`.knob[data-ch="A"][data-step="${i}"]`);
+                let knobB = document.querySelector(`.knob[data-ch="B"][data-step="${i}"]`);
+                let knobC = document.querySelector(`.knob[data-ch="C"][data-step="${i}"]`);
+                knobA.dataset.val = acidA[i]; knobB.dataset.val = 0; knobC.dataset.val = acidC[i];
+                updateKnobVisual(knobA, acidA[i]); updateKnobVisual(knobB, 0); updateKnobVisual(knobC, acidC[i]);
+            }
+            
+            const speedKnob = document.getElementById('clockSpeed');
+            speedKnob.dataset.val = 50; bpm = 40 + (50 / 100) * 200; updateKnobVisual(speedKnob, 50);
+
+            const portaKnob = document.getElementById('portamento');
+            portaKnob.dataset.val = 0; portamentoTime = 0.01; updateKnobVisual(portaKnob, 0);
+
+            updateKnobVisual(document.getElementById('pitchTuneKnob'), 50);
+            updateKnobVisual(document.getElementById('envAttack'), 2); updateKnobVisual(document.getElementById('envDecay'), 20);
+            updateKnobVisual(document.getElementById('envSustain'), 10); updateKnobVisual(document.getElementById('envRelease'), 10);
+
+            resetStep = null; 
+            document.querySelectorAll('.patch-point').forEach(el => el.classList.remove('patched', 'patched-b'));
+
+            if (document.getElementById('resetStatus')) document.getElementById('resetStatus').innerText = "PATCH: NONE";
+            if (document.getElementById('resetStatusMobile')) document.getElementById('resetStatusMobile').innerText = "PATCH: NONE";
+        });
+
+        renderGrid();
+        renderKeyboard();
+    </script>
+</body>
+</html>
