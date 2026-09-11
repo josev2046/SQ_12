@@ -7,6 +7,7 @@
     -- Patched: Continuous CV Pitch Bend & Clock-Mod Gate Sync for Web MIDI --
     -- Patched: Hardware Sync Edition (MIDI IN + Analog Sync Pulse Out) --
     -- UI Update: Consolidated DAW & Sync controls to the right of the sequencer grid --
+    -- Bugfix pass: Fixed stuck notes on MIDI disable, spurious Note Offs, and added MIDI Portamento CC output --
 -->
 <html lang="en">
 <head>
@@ -858,13 +859,26 @@
         }
 
         function sendMidiPitchBend(cents, timestamp = 0) {
-            if (!midiOutput) return;
+            if (!midiOutput || !midiEnabled) return;
             const range = 200; // General MIDI default: +/- 2 semitones
             let bend = 8192 + Math.round((cents / range) * 8192);
             bend = Math.max(0, Math.min(16383, bend));
             const msg = [0xE0, bend & 0x7F, (bend >> 7) & 0x7F];
             if (timestamp > 0) midiOutput.send(msg, timestamp);
             else midiOutput.send(msg);
+        }
+
+        function sendMidiPortamento(val, timestamp = 0) {
+            if (!midiOutput || !midiEnabled) return;
+            const ccTime = Math.round((val / 100) * 127);
+            const ccSwitch = val > 0 ? 127 : 0;
+            if (timestamp > 0) {
+                midiOutput.send([0xB0, 5, ccTime], timestamp);
+                midiOutput.send([0xB0, 65, ccSwitch], timestamp);
+            } else {
+                midiOutput.send([0xB0, 5, ccTime]);
+                midiOutput.send([0xB0, 65, ccSwitch]);
+            }
         }
 
         // --- Analog Sync Out Toggle ---
@@ -944,8 +958,8 @@
             }
         }
 
-        function stopPreview() {
-            if (midiEnabled && midiOutput && activePreviewMidiNote !== null) {
+        function stopPreview(fromMidiIn = false) {
+            if (midiEnabled && midiOutput && activePreviewMidiNote !== null && !fromMidiIn) {
                 midiOutput.send([0x80, activePreviewMidiNote, 0]);
                 activePreviewMidiNote = null;
             }
@@ -1024,6 +1038,7 @@
                         bpm = 40 + (newVal / 100) * 200;
                     } else if(activeKnob.id === 'portamento') {
                         portamentoTime = 0.01 + (newVal / 100) * 0.3;
+                        sendMidiPortamento(newVal);
                     } else if(activeKnob.id === 'pitchTuneKnob') {
                         finePitchTuneSemitones = -12 + (newVal / 100) * 24;
                     } else if(activeKnob.id === 'envAttack') {
@@ -1047,7 +1062,7 @@
                     try { activeKnob.releasePointerCapture(e.pointerId); } catch(err){}
                 }
                 activeKnob = null;
-                stopPreview();
+                stopPreview(false);
             }
         };
         document.addEventListener('pointerup', endDrag);
@@ -1269,8 +1284,8 @@
                     }
                 });
 
-                btn.addEventListener('pointerup', () => stopPreview());
-                btn.addEventListener('pointercancel', () => stopPreview());
+                btn.addEventListener('pointerup', () => stopPreview(false));
+                btn.addEventListener('pointercancel', () => stopPreview(false));
                 container.appendChild(btn);
             });
         }
@@ -1514,9 +1529,17 @@
         }
 
         function handleMidiMessage(event) {
-            if (!midiEnabled) return;
             const [status, note, velocity] = event.data;
             const cmd = status & 0xF0;
+
+            if (!midiEnabled) {
+                // Prevent stuck notes if MIDI is disabled mid-hold: only allow the specific Note Off to pass
+                if (activeExtMidiNote !== null && note === activeExtMidiNote && (cmd === 0x80 || (cmd === 0x90 && velocity === 0))) {
+                    // proceed to Note Off
+                } else {
+                    return;
+                }
+            }
 
             if (cmd === 0x90 && velocity > 0) {
                 const pitchVal = (note - 36) / 12; // Base C2 = 36
@@ -1530,7 +1553,7 @@
             } else if (cmd === 0x80 || (cmd === 0x90 && velocity === 0)) {
                 if (activeExtMidiNote === note) {
                     activeExtMidiNote = null;
-                    stopPreview();
+                    stopPreview(true);
                 }
             }
         }
@@ -1601,9 +1624,18 @@
             midiEnabled = !midiEnabled;
             btnMidi.classList.toggle('active-toggle', midiEnabled);
             btnMidi.innerText = `MIDI: ${midiEnabled ? 'ON' : 'OFF'}`;
-            if (!midiEnabled && activePreviewMidiNote !== null) {
-                if(midiOutput) midiOutput.send([0x80, activePreviewMidiNote, 0]);
-                activePreviewMidiNote = null;
+            if (midiEnabled) {
+                const pVal = parseFloat(document.getElementById('portamento').dataset.val);
+                sendMidiPortamento(pVal);
+            } else {
+                if (activePreviewMidiNote !== null) {
+                    if(midiOutput) midiOutput.send([0x80, activePreviewMidiNote, 0]);
+                    activePreviewMidiNote = null;
+                }
+                if (activeExtMidiNote !== null) {
+                    activeExtMidiNote = null;
+                    stopPreview(true);
+                }
             }
         });
 
@@ -1665,6 +1697,7 @@
 
             const portaKnob = document.getElementById('portamento');
             portaKnob.dataset.val = 0; portamentoTime = 0.01; updateKnobVisual(portaKnob, 0);
+            sendMidiPortamento(0);
 
             updateKnobVisual(document.getElementById('pitchTuneKnob'), 50);
             updateKnobVisual(document.getElementById('envAttack'), 5); updateKnobVisual(document.getElementById('envDecay'), 30);
@@ -1711,6 +1744,7 @@
 
             const portaKnob = document.getElementById('portamento');
             portaKnob.dataset.val = 0; portamentoTime = 0.01; updateKnobVisual(portaKnob, 0);
+            sendMidiPortamento(0);
 
             updateKnobVisual(document.getElementById('pitchTuneKnob'), 50);
             updateKnobVisual(document.getElementById('envAttack'), 2); updateKnobVisual(document.getElementById('envDecay'), 20);
