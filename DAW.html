@@ -4,6 +4,8 @@
     Created & Developed by Jose Velazquez MA
     Voltage & Wave (https://voltageandwave.co.uk/)
     -- Patched: Added DAW functionality (Local WAV Recording + Web MIDI Output) --
+    -- Patched: Continuous CV Pitch Bend & Clock-Mod Gate Sync for Web MIDI --
+    -- Patched: Hardware Sync Edition (MIDI IN + Analog Sync Pulse Out) --
 -->
 <html lang="en">
 <head>
@@ -512,22 +514,33 @@
                     <div class="panel-divider"></div>
 
                     <!-- 5. DAW / OUTPUT CONTROLS -->
-                    <div class="flex items-center gap-5 relative pl-1 pr-2">
-                        <span class="absolute -top-6 left-1/2 -translate-x-1/2 text-[8px] font-bold tracking-widest text-[#82796e] whitespace-nowrap">DAW & MIDI</span>
+                    <div class="flex items-center gap-4 relative pl-1 pr-2">
+                        <span class="absolute -top-6 left-1/2 -translate-x-1/2 text-[8px] font-bold tracking-widest text-[#82796e] whitespace-nowrap">DAW & SYNC</span>
 
                         <!-- Audio Recording -->
-                        <div class="flex flex-col gap-1.5 items-center justify-center w-[65px]">
+                        <div class="flex flex-col gap-1.5 items-center justify-center w-[60px]">
                             <button id="btnRecord" class="tactile-button px-2 py-1.5 rounded text-[9px] font-bold w-full">● REC</button>
                             <div id="recStatus" class="text-[8px] font-bold text-[#1f1a14] text-center w-full">00:00</div>
                             <a id="btnDownload" href="#" class="tactile-button px-2 py-1 rounded text-[9px] font-bold w-full text-center opacity-40 pointer-events-none">SAVE</a>
                         </div>
 
-                        <!-- MIDI Out -->
-                        <div class="flex flex-col gap-1.5 items-center justify-center w-[90px]">
-                            <button id="btnMidi" class="tactile-button px-2 py-1.5 rounded text-[9px] font-bold w-full">MIDI: OFF</button>
-                            <select id="midiOutSelect" class="text-[8px] font-bold text-[#5a544a] bg-[#e2dbc8] border border-[#38342e]/30 rounded px-1 py-1 w-full truncate">
-                                <option>Checking...</option>
+                        <!-- Web MIDI -->
+                        <div class="flex flex-col gap-1.5 items-center justify-center w-[85px]">
+                            <select id="midiInSelect" class="text-[7px] font-bold text-[#5a544a] bg-[#e2dbc8] border border-[#38342e]/30 rounded px-1 py-1 w-full truncate" title="MIDI Input">
+                                <option>IN: Checking...</option>
                             </select>
+                            <select id="midiOutSelect" class="text-[7px] font-bold text-[#5a544a] bg-[#e2dbc8] border border-[#38342e]/30 rounded px-1 py-1 w-full truncate" title="MIDI Output">
+                                <option>OUT: Checking...</option>
+                            </select>
+                            <button id="btnMidi" class="tactile-button px-2 py-1.5 rounded text-[9px] font-bold w-full">MIDI: OFF</button>
+                        </div>
+                        
+                        <!-- Analog Sync Out -->
+                        <div class="flex flex-col gap-1.5 items-center justify-center w-[60px] h-full">
+                            <button id="btnAnalogSync" class="tactile-button px-2 py-3 rounded text-[9px] font-bold w-full h-full flex flex-col items-center justify-center gap-1">
+                                <span class="w-2 h-2 rounded-full bg-[#111] shadow-[inset_0_1px_2px_rgba(255,255,255,0.2)] transition-all" id="syncLed"></span>
+                                SYNC OUT
+                            </button>
                         </div>
                     </div>
 
@@ -585,10 +598,16 @@
         let recordStartTime = 0;
         let recordTimerInterval = null;
         
+        // Web MIDI Hooks
         let midiAccess = null;
+        let midiInput = null;
         let midiOutput = null;
         let midiEnabled = false;
-        let activePreviewMidiNote = null; 
+        let activePreviewMidiNote = null;
+        let activeExtMidiNote = null; 
+
+        // Analog Sync Hook
+        let isAnalogSyncOn = false;
 
         let bpm = 120;
         let portamentoTime = 0.01;
@@ -702,7 +721,7 @@
         }
 
         function updateDisplay(step, volt, ch = 'A') {
-            const stepStr = `STEP: ${step < 0 ? '--' : step + 1}`;
+            const stepStr = `STEP: ${step < 0 ? '--' : (ch === 'EXT' ? 'IN' : step + 1)}`;
             const voltStr = `VOLT: ${volt >= 0 ? '+' : ''}${volt.toFixed(2)}`;
             let noteStr = '';
 
@@ -819,7 +838,44 @@
             });
         });
 
-        function previewSynth(pitchVal, cVal, retrigger = false) {
+        // --- Pitch Mapping & MIDI Pitch Bend Helpers ---
+        function getMidiPitchInfo(semitoneOffset) {
+            const nearestSemitone = Math.round(semitoneOffset);
+            const cents = Math.round((semitoneOffset - nearestSemitone) * 100);
+            let midiNote = 36 + nearestSemitone; // C2 = 36
+            midiNote = Math.max(0, Math.min(127, midiNote));
+            return { midiNote, cents };
+        }
+
+        function sendMidiPitchBend(cents, timestamp = 0) {
+            if (!midiOutput) return;
+            const range = 200; // General MIDI default: +/- 2 semitones
+            let bend = 8192 + Math.round((cents / range) * 8192);
+            bend = Math.max(0, Math.min(16383, bend));
+            const msg = [0xE0, bend & 0x7F, (bend >> 7) & 0x7F];
+            if (timestamp > 0) midiOutput.send(msg, timestamp);
+            else midiOutput.send(msg);
+        }
+
+        // --- Analog Sync Out Toggle ---
+        const btnAnalogSync = document.getElementById('btnAnalogSync');
+        const syncLed = document.getElementById('syncLed');
+
+        btnAnalogSync.addEventListener('click', async () => {
+            await initAudio();
+            isAnalogSyncOn = !isAnalogSyncOn;
+            if (isAnalogSyncOn) {
+                btnAnalogSync.classList.add('active-toggle');
+                syncLed.classList.replace('bg-[#111]', 'bg-[#ff2a2a]');
+                syncLed.classList.add('shadow-[0_0_8px_#ff2a2a]');
+            } else {
+                btnAnalogSync.classList.remove('active-toggle');
+                syncLed.classList.replace('bg-[#ff2a2a]', 'bg-[#111]');
+                syncLed.classList.remove('shadow-[0_0_8px_#ff2a2a]');
+            }
+        });
+
+        function previewSynth(pitchVal, cVal, retrigger = false, fromMidiIn = false) {
             if(!audioCtx) return;
             const semitone = (pitchVal * 12) + transposeSemitones + octaveOffsetSemitones + finePitchTuneSemitones; 
             const freq = 65.41 * Math.pow(2, semitone / 12); 
@@ -839,14 +895,24 @@
 
             const now = audioCtx.currentTime;
 
-            // DAW MIDI Support during keyboard preview
-            if (midiEnabled && midiOutput) {
-                let midiNote = 36 + Math.round(semitone);
-                midiNote = Math.max(0, Math.min(127, midiNote));
+            // DAW MIDI Continuous CV Support
+            if (midiEnabled && midiOutput && !fromMidiIn) {
+                const { midiNote, cents } = getMidiPitchInfo(semitone);
+                
                 if (retrigger || !isPreviewing) {
                     if (activePreviewMidiNote !== null) midiOutput.send([0x80, activePreviewMidiNote, 0]);
+                    sendMidiPitchBend(cents);
                     midiOutput.send([0x90, midiNote, 100]);
                     activePreviewMidiNote = midiNote;
+                } else {
+                    if (activePreviewMidiNote !== midiNote) {
+                        midiOutput.send([0x80, activePreviewMidiNote, 0]);
+                        sendMidiPitchBend(cents);
+                        midiOutput.send([0x90, midiNote, 100]);
+                        activePreviewMidiNote = midiNote;
+                    } else {
+                        sendMidiPitchBend(cents);
+                    }
                 }
             }
 
@@ -907,7 +973,7 @@
                         let pVal = is24 ? (stepIdx < 12 ? tracks.A[uiStep] : tracks.B[uiStep]) : tracks.A[uiStep];
                         pVal *= voltageRangeMultiplier;
                         let fVal = tracks.C[uiStep];
-                        previewSynth(pVal, fVal, true);
+                        previewSynth(pVal, fVal, true, false);
                     }
                 }
             }
@@ -938,7 +1004,7 @@
                         let pVal = is24 ? (stepIdx < 12 ? tracks.A[uiStep] : tracks.B[uiStep]) : tracks.A[uiStep];
                         pVal *= voltageRangeMultiplier;
                         let fVal = tracks.C[uiStep];
-                        previewSynth(pVal, fVal, false);
+                        previewSynth(pVal, fVal, false, false);
                     }
                     activeKnob.dataset.val = newVal;
                 } else {
@@ -981,12 +1047,35 @@
             if(!audioCtx) return;
             const semitone = (pitchVal * 12) + transposeSemitones + octaveOffsetSemitones + finePitchTuneSemitones; 
             const freq = 65.41 * Math.pow(2, semitone / 12); 
-            const stepGateTime = Math.max(0.05, ((60.0 / bpm) * 0.25) - 0.02);
+            
+            // Calculate actual step duration incorporating Clock modulation if active
+            let currentStepDuration = (60.0 / bpm) * 0.25;
+            if (activeChCDest === 'clock') {
+                const cMod = cVal / 2.5;
+                currentStepDuration = currentStepDuration * Math.max(0.1, (2.1 - cMod));
+            }
+            const stepGateTime = Math.max(0.05, currentStepDuration - 0.02);
 
-            // DAW MIDI scheduling
+            // Send Analog Sync Pulse Out to headphone jack (Bypasses WAV Recorder)
+            if (isAnalogSyncOn) {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(1000, time);
+                
+                gain.gain.setValueAtTime(1.0, time);
+                gain.gain.exponentialRampToValueAtTime(0.001, time + 0.015);
+                
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                
+                osc.start(time);
+                osc.stop(time + 0.02);
+            }
+
+            // DAW MIDI scheduling with continuous pitch
             if (midiEnabled && midiOutput) {
-                let midiNote = 36 + Math.round(semitone);
-                midiNote = Math.max(0, Math.min(127, midiNote));
+                const { midiNote, cents } = getMidiPitchInfo(semitone);
                 
                 let velocity = 100;
                 if (activeChCDest === 'volume') velocity = Math.max(1, Math.min(127, Math.round((cVal / 5) * 127)));
@@ -995,6 +1084,7 @@
                 const midiTime = performance.now() + timeOffset;
                 const noteEndTime = midiTime + (stepGateTime * 1000);
 
+                sendMidiPitchBend(cents, midiTime);
                 midiOutput.send([0x90, midiNote, velocity], midiTime);
                 midiOutput.send([0x80, midiNote, 0], noteEndTime);
             }
@@ -1165,7 +1255,7 @@
 
                     if (!isPlaying) {
                         let fVal = tracks.C[0];
-                        previewSynth(pVal, fVal, true);
+                        previewSynth(pVal, fVal, true, false);
                     }
                 });
 
@@ -1295,6 +1385,7 @@
         const recStatus = document.getElementById('recStatus');
         const btnDownload = document.getElementById('btnDownload');
         const btnMidi = document.getElementById('btnMidi');
+        const midiInSelect = document.getElementById('midiInSelect');
         const midiOutSelect = document.getElementById('midiOutSelect');
 
         // Recording to a local WAV file (MediaRecorder + re-encode)
@@ -1412,25 +1503,84 @@
             return `sq12-recording-${stamp}.${ext}`;
         }
 
-        function populateMidiOutputs() {
+        function handleMidiMessage(event) {
+            if (!midiEnabled) return;
+            const [status, note, velocity] = event.data;
+            const cmd = status & 0xF0;
+
+            if (cmd === 0x90 && velocity > 0) {
+                const pitchVal = (note - 36) / 12; // Base C2 = 36
+                const cVal = (velocity / 127) * 5; // Velocity maps to CH-C (0-5V)
+                activeExtMidiNote = note;
+                
+                initAudio().then(() => {
+                    previewSynth(pitchVal, cVal, true, true);
+                    updateDisplay(-1, pitchVal, 'EXT');
+                });
+            } else if (cmd === 0x80 || (cmd === 0x90 && velocity === 0)) {
+                if (activeExtMidiNote === note) {
+                    activeExtMidiNote = null;
+                    stopPreview();
+                }
+            }
+        }
+
+        function bindMidiInput(newInput) {
+            if (midiInput) midiInput.onmidimessage = null;
+            midiInput = newInput;
+            if (midiInput) {
+                midiInSelect.value = midiInput.id;
+                midiInput.onmidimessage = handleMidiMessage;
+            }
+        }
+
+        function populateMidiIO() {
+            // Populate Outputs
             const outputs = Array.from(midiAccess.outputs.values());
             midiOutSelect.innerHTML = '';
             if (outputs.length === 0) {
                 const opt = document.createElement('option');
-                opt.innerText = 'No MIDI outputs';
+                opt.innerText = 'NO OUT';
                 midiOutSelect.appendChild(opt);
                 midiOutput = null;
-                return;
+            } else {
+                outputs.forEach((out) => {
+                    const opt = document.createElement('option');
+                    opt.value = out.id;
+                    opt.innerText = "OUT: " + out.name;
+                    midiOutSelect.appendChild(opt);
+                });
+                if (!midiOutput || !outputs.find(o => o.id === midiOutput.id)) midiOutput = outputs[0];
+                midiOutSelect.value = midiOutput.id;
             }
-            outputs.forEach((out) => {
+
+            // Populate Inputs
+            const inputs = Array.from(midiAccess.inputs.values());
+            midiInSelect.innerHTML = '';
+            if (inputs.length === 0) {
                 const opt = document.createElement('option');
-                opt.value = out.id;
-                opt.innerText = out.name;
-                midiOutSelect.appendChild(opt);
-            });
-            if (!midiOutput || !outputs.find(o => o.id === midiOutput.id)) midiOutput = outputs[0];
-            midiOutSelect.value = midiOutput.id;
+                opt.innerText = 'NO IN';
+                midiInSelect.appendChild(opt);
+                midiInput = null;
+            } else {
+                inputs.forEach((inp) => {
+                    const opt = document.createElement('option');
+                    opt.value = inp.id;
+                    opt.innerText = "IN: " + inp.name;
+                    midiInSelect.appendChild(opt);
+                });
+                if (!midiInput || !inputs.find(i => i.id === midiInput.id)) {
+                    bindMidiInput(inputs[0]);
+                } else {
+                    midiInSelect.value = midiInput.id;
+                }
+            }
         }
+
+        midiInSelect.addEventListener('change', () => {
+            if (!midiAccess) return;
+            bindMidiInput(midiAccess.inputs.get(midiInSelect.value) || null);
+        });
 
         midiOutSelect.addEventListener('change', () => {
             if (!midiAccess) return;
@@ -1454,17 +1604,20 @@
                 btnMidi.classList.add('opacity-40');
                 midiOutSelect.innerHTML = '<option>Not supported</option>';
                 midiOutSelect.disabled = true;
+                midiInSelect.innerHTML = '<option>Not supported</option>';
+                midiInSelect.disabled = true;
                 return;
             }
             try {
                 midiAccess = await navigator.requestMIDIAccess();
-                populateMidiOutputs();
-                midiAccess.onstatechange = populateMidiOutputs;
+                populateMidiIO();
+                midiAccess.onstatechange = populateMidiIO;
             } catch (err) {
                 btnMidi.disabled = true;
                 btnMidi.innerText = 'DENIED';
                 btnMidi.classList.add('opacity-40');
                 midiOutSelect.innerHTML = '<option>Permission denied</option>';
+                midiInSelect.innerHTML = '<option>Permission denied</option>';
             }
         }
         initMidi();
