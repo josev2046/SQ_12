@@ -6,6 +6,7 @@
     -- Patched: Added DAW functionality (Local WAV Recording + Web MIDI Output) --
     -- Patched: Continuous CV Pitch Bend & Clock-Mod Gate Sync for Web MIDI --
     -- Patched: Hardware Sync Edition (MIDI IN + Analog Sync Pulse Out) --
+    -- UI Update: Consolidated DAW & Sync controls to the right of the sequencer grid --
 -->
 <html lang="en">
 <head>
@@ -337,7 +338,7 @@
                 </div>
             </div>
 
-            <!-- MASTER CONTROL ROW -->
+            <!-- MASTER CONTROL ROW (Now compact, DAW removed) -->
             <div class="panel-outline w-full overflow-x-auto grid-scroll mb-8">
                 <div class="flex flex-nowrap items-center justify-between min-w-max gap-6 px-4 pt-8 pb-5 mx-auto h-full">
                     
@@ -511,50 +512,59 @@
                         </div>
                     </div>
 
-                    <div class="panel-divider"></div>
+                </div>
+            </div>
 
-                    <!-- 5. DAW / OUTPUT CONTROLS -->
-                    <div class="flex items-center gap-4 relative pl-1 pr-2">
-                        <span class="absolute -top-6 left-1/2 -translate-x-1/2 text-[8px] font-bold tracking-widest text-[#82796e] whitespace-nowrap">DAW & SYNC</span>
+            <!-- SEQUENCER GRID + DAW MODULE -->
+            <div class="panel-outline w-full overflow-x-auto grid-scroll mb-6 !py-8 !px-4">
+                <div class="flex items-stretch justify-center w-full min-w-max gap-8 px-2">
+                    
+                    <!-- Left: Main Sequencer Matrix -->
+                    <div class="flex flex-col gap-6 flex-shrink-0">
+                        <div class="flex"><div class="row-label"></div><div class="flex gap-4 flex-1" id="ledRow"></div></div>
+                        <div class="flex"><div class="row-label text-[#1f1a14]"><div id="pilotA" class="pilot"></div>CH-A</div><div class="flex gap-4 flex-1" id="rowA"></div></div>
+                        <div class="flex"><div class="row-label text-[#1f1a14]"><div id="pilotB" class="pilot"></div>CH-B</div><div class="flex gap-4 flex-1" id="rowB"></div></div>
+                        <div class="flex"><div class="row-label text-[#1f1a14]">CH-C</div><div class="flex gap-4 flex-1" id="rowC"></div></div>
+                        <div class="flex mt-2"><div class="row-label text-[#1f1a14] text-[10px]">TRIG<br>OUT</div><div class="flex gap-4 flex-1" id="trigRow"></div></div>
+                    </div>
 
-                        <!-- Audio Recording -->
-                        <div class="flex flex-col gap-1.5 items-center justify-center w-[60px]">
+                    <!-- Divider -->
+                    <div class="w-[1.5px] bg-gradient-to-b from-transparent via-[#38342e]/30 to-transparent flex-shrink-0"></div>
+
+                    <!-- Right: DAW & Sync Patchbay -->
+                    <div class="flex flex-col items-center justify-between py-1 flex-shrink-0 w-[120px]">
+                        <div class="text-[8px] font-bold tracking-widest text-[#82796e] text-center mb-3">DAW & EXT SYNC</div>
+                        
+                        <!-- AUDIO CAPTURE -->
+                        <div class="w-full flex flex-col gap-1.5 mb-3 p-2 bg-[#38342e]/5 border border-[#38342e]/20 rounded">
+                            <span class="text-[7px] font-bold text-[#1f1a14] text-center w-full">AUDIO CAPTURE</span>
                             <button id="btnRecord" class="tactile-button px-2 py-1.5 rounded text-[9px] font-bold w-full">● REC</button>
-                            <div id="recStatus" class="text-[8px] font-bold text-[#1f1a14] text-center w-full">00:00</div>
+                            <div id="recStatus" class="text-[8px] font-bold text-[#1f1a14] text-center w-full my-0.5">00:00</div>
                             <a id="btnDownload" href="#" class="tactile-button px-2 py-1 rounded text-[9px] font-bold w-full text-center opacity-40 pointer-events-none">SAVE</a>
                         </div>
 
-                        <!-- Web MIDI -->
-                        <div class="flex flex-col gap-1.5 items-center justify-center w-[85px]">
-                            <select id="midiInSelect" class="text-[7px] font-bold text-[#5a544a] bg-[#e2dbc8] border border-[#38342e]/30 rounded px-1 py-1 w-full truncate" title="MIDI Input">
+                        <!-- WEB MIDI -->
+                        <div class="w-full flex flex-col gap-1.5 mb-3 p-2 bg-[#38342e]/5 border border-[#38342e]/20 rounded">
+                            <span class="text-[7px] font-bold text-[#1f1a14] text-center w-full">WEB MIDI</span>
+                            <button id="btnMidi" class="tactile-button px-2 py-1.5 rounded text-[9px] font-bold w-full">MIDI: OFF</button>
+                            <select id="midiInSelect" class="text-[7px] font-bold text-[#5a544a] bg-[#e2dbc8] border border-[#38342e]/30 rounded px-1 py-1 w-full truncate mt-0.5" title="MIDI Input">
                                 <option>IN: Checking...</option>
                             </select>
                             <select id="midiOutSelect" class="text-[7px] font-bold text-[#5a544a] bg-[#e2dbc8] border border-[#38342e]/30 rounded px-1 py-1 w-full truncate" title="MIDI Output">
                                 <option>OUT: Checking...</option>
                             </select>
-                            <button id="btnMidi" class="tactile-button px-2 py-1.5 rounded text-[9px] font-bold w-full">MIDI: OFF</button>
                         </div>
-                        
-                        <!-- Analog Sync Out -->
-                        <div class="flex flex-col gap-1.5 items-center justify-center w-[60px] h-full">
-                            <button id="btnAnalogSync" class="tactile-button px-2 py-3 rounded text-[9px] font-bold w-full h-full flex flex-col items-center justify-center gap-1">
-                                <span class="w-2 h-2 rounded-full bg-[#111] shadow-[inset_0_1px_2px_rgba(255,255,255,0.2)] transition-all" id="syncLed"></span>
+
+                        <!-- ANALOG SYNC -->
+                        <div class="w-full flex flex-col gap-1.5 p-2 bg-[#38342e]/5 border border-[#38342e]/20 rounded flex-1">
+                            <span class="text-[7px] font-bold text-[#1f1a14] text-center w-full">ANALOG CLOCK</span>
+                            <button id="btnAnalogSync" class="tactile-button px-2 py-2 rounded text-[9px] font-bold w-full h-full flex flex-col items-center justify-center gap-2">
+                                <span class="w-2.5 h-2.5 rounded-full bg-[#111] shadow-[inset_0_1px_2px_rgba(255,255,255,0.2)] transition-all" id="syncLed"></span>
                                 SYNC OUT
                             </button>
                         </div>
                     </div>
 
-                </div>
-            </div>
-
-            <!-- SEQUENCER GRID -->
-            <div class="panel-outline w-full overflow-x-auto grid-scroll mb-6 !py-8 !px-4">
-                <div class="flex flex-col gap-6 min-w-max mx-auto px-2">
-                    <div class="flex"><div class="row-label"></div><div class="flex gap-4 flex-1" id="ledRow"></div></div>
-                    <div class="flex"><div class="row-label text-[#1f1a14]"><div id="pilotA" class="pilot"></div>CH-A</div><div class="flex gap-4 flex-1" id="rowA"></div></div>
-                    <div class="flex"><div class="row-label text-[#1f1a14]"><div id="pilotB" class="pilot"></div>CH-B</div><div class="flex gap-4 flex-1" id="rowB"></div></div>
-                    <div class="flex"><div class="row-label text-[#1f1a14]">CH-C</div><div class="flex gap-4 flex-1" id="rowC"></div></div>
-                    <div class="flex mt-2"><div class="row-label text-[#1f1a14] text-[10px]">TRIG<br>OUT</div><div class="flex gap-4 flex-1" id="trigRow"></div></div>
                 </div>
             </div>
             
