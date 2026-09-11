@@ -8,6 +8,7 @@
     -- Patched: Hardware Sync Edition (MIDI IN + Analog Sync Pulse Out) --
     -- UI Update: Consolidated DAW & Sync controls to the right of the sequencer grid --
     -- Bugfix pass: Fixed stuck notes on MIDI disable, spurious Note Offs, and added MIDI Portamento CC output --
+    -- Bugfix pass: Fixed CH-B audio preview routing and unified Knob Visual/State sync defaults --
 -->
 <html lang="en">
 <head>
@@ -339,7 +340,7 @@
                 </div>
             </div>
 
-            <!-- MASTER CONTROL ROW (Now compact, DAW removed) -->
+            <!-- MASTER CONTROL ROW -->
             <div class="panel-outline w-full overflow-x-auto grid-scroll mb-8">
                 <div class="flex flex-nowrap items-center justify-between min-w-max gap-6 px-4 pt-8 pb-5 mx-auto h-full">
                     
@@ -374,7 +375,7 @@
                             <div class="knob-wrapper">
                                 <div class="tick-container">
                                     <div class="tick-ring"></div>
-                                    <div class="knob global-knob" id="clockSpeed" data-val="50"></div>
+                                    <div class="knob global-knob" id="clockSpeed" data-val="40"></div>
                                 </div>
                                 <span class="text-[9px] font-bold text-[#1f1a14]">SPEED</span>
                             </div>
@@ -486,14 +487,14 @@
                         <div class="knob-wrapper">
                             <div class="tick-container">
                                 <div class="tick-ring"></div>
-                                <div class="knob global-knob" id="envAttack" data-val="5"></div>
+                                <div class="knob global-knob" id="envAttack" data-val="1"></div>
                             </div>
                             <span class="text-[8px] font-bold text-[#1f1a14]">ATK</span>
                         </div>
                         <div class="knob-wrapper">
                             <div class="tick-container">
                                 <div class="tick-ring"></div>
-                                <div class="knob global-knob" id="envDecay" data-val="30"></div>
+                                <div class="knob global-knob" id="envDecay" data-val="16.25"></div>
                             </div>
                             <span class="text-[8px] font-bold text-[#1f1a14]">DEC</span>
                         </div>
@@ -507,7 +508,7 @@
                         <div class="knob-wrapper">
                             <div class="tick-container">
                                 <div class="tick-ring"></div>
-                                <div class="knob global-knob" id="envRelease" data-val="25"></div>
+                                <div class="knob global-knob" id="envRelease" data-val="12"></div>
                             </div>
                             <span class="text-[8px] font-bold text-[#1f1a14]">REL</span>
                         </div>
@@ -771,6 +772,14 @@
                 knobEl.style.transform = `rotate(${-135 + (val / 100) * 270}deg)`;
             }
         }
+        
+        function setGlobalKnob(id, val) {
+            const el = document.getElementById(id);
+            if (el) {
+                el.dataset.val = val;
+                updateKnobVisual(el, val);
+            }
+        }
 
         function setWaveform(idx) {
             activeWaveform = waveforms[idx];
@@ -994,10 +1003,11 @@
                     updateDisplay(stepIdx, displayVal, ch);
                     
                     if (!isPlaying) {
-                        let pVal = is24 ? (stepIdx < 12 ? tracks.A[uiStep] : tracks.B[uiStep]) : tracks.A[uiStep];
+                        let pVal = (ch === 'B') ? tracks.B[uiStep] : tracks.A[uiStep];
                         pVal *= voltageRangeMultiplier;
                         let fVal = tracks.C[uiStep];
-                        previewSynth(pVal, fVal, true, false);
+                        // If tweaking Filter C, don't retrigger the ADSR envelope unless a note is already held
+                        previewSynth(pVal, fVal, ch !== 'C', false);
                     }
                 }
             }
@@ -1025,7 +1035,7 @@
                     updateDisplay(stepIdx, displayVal, ch);
                     
                     if (!isPlaying && isPreviewing) {
-                        let pVal = is24 ? (stepIdx < 12 ? tracks.A[uiStep] : tracks.B[uiStep]) : tracks.A[uiStep];
+                        let pVal = (ch === 'B') ? tracks.B[uiStep] : tracks.A[uiStep];
                         pVal *= voltageRangeMultiplier;
                         let fVal = tracks.C[uiStep];
                         previewSynth(pVal, fVal, false, false);
@@ -1213,13 +1223,14 @@
                 const val = (ch === 'C') ? 2.5 : 0;
                 updateKnobVisual(k, val);
             });
-            updateKnobVisual(document.getElementById('clockSpeed'), 50);
-            updateKnobVisual(document.getElementById('portamento'), 0);
-            updateKnobVisual(document.getElementById('pitchTuneKnob'), 50);
-            updateKnobVisual(document.getElementById('envAttack'), 5);
-            updateKnobVisual(document.getElementById('envDecay'), 30);
-            updateKnobVisual(document.getElementById('envSustain'), 20);
-            updateKnobVisual(document.getElementById('envRelease'), 25);
+            
+            setGlobalKnob('clockSpeed', 40);
+            setGlobalKnob('portamento', 0);
+            setGlobalKnob('pitchTuneKnob', 50);
+            setGlobalKnob('envAttack', 1);
+            setGlobalKnob('envDecay', 16.25);
+            setGlobalKnob('envSustain', 20);
+            setGlobalKnob('envRelease', 12);
             
             setOctave(1);
             setWaveform(0);
@@ -1533,7 +1544,6 @@
             const cmd = status & 0xF0;
 
             if (!midiEnabled) {
-                // Prevent stuck notes if MIDI is disabled mid-hold: only allow the specific Note Off to pass
                 if (activeExtMidiNote !== null && note === activeExtMidiNote && (cmd === 0x80 || (cmd === 0x90 && velocity === 0))) {
                     // proceed to Note Off
                 } else {
@@ -1692,16 +1702,13 @@
                 updateKnobVisual(knobA, dafA[i]); updateKnobVisual(knobB, dafB[i]); updateKnobVisual(knobC, 2.5);
             }
             
-            const speedKnob = document.getElementById('clockSpeed');
-            speedKnob.dataset.val = 35; bpm = 40 + (35 / 100) * 200; updateKnobVisual(speedKnob, 35);
-
-            const portaKnob = document.getElementById('portamento');
-            portaKnob.dataset.val = 0; portamentoTime = 0.01; updateKnobVisual(portaKnob, 0);
-            sendMidiPortamento(0);
-
-            updateKnobVisual(document.getElementById('pitchTuneKnob'), 50);
-            updateKnobVisual(document.getElementById('envAttack'), 5); updateKnobVisual(document.getElementById('envDecay'), 30);
-            updateKnobVisual(document.getElementById('envSustain'), 20); updateKnobVisual(document.getElementById('envRelease'), 25);
+            setGlobalKnob('clockSpeed', 35); bpm = 40 + (35 / 100) * 200;
+            setGlobalKnob('portamento', 0); portamentoTime = 0.01; sendMidiPortamento(0);
+            setGlobalKnob('pitchTuneKnob', 50);
+            setGlobalKnob('envAttack', 1); 
+            setGlobalKnob('envDecay', 16.25);
+            setGlobalKnob('envSustain', 20); 
+            setGlobalKnob('envRelease', 12);
 
             resetStep = 16; 
             document.querySelectorAll('.patch-point').forEach(el => el.classList.remove('patched', 'patched-b'));
@@ -1739,16 +1746,13 @@
                 updateKnobVisual(knobA, acidA[i]); updateKnobVisual(knobB, 0); updateKnobVisual(knobC, acidC[i]);
             }
             
-            const speedKnob = document.getElementById('clockSpeed');
-            speedKnob.dataset.val = 50; bpm = 40 + (50 / 100) * 200; updateKnobVisual(speedKnob, 50);
-
-            const portaKnob = document.getElementById('portamento');
-            portaKnob.dataset.val = 0; portamentoTime = 0.01; updateKnobVisual(portaKnob, 0);
-            sendMidiPortamento(0);
-
-            updateKnobVisual(document.getElementById('pitchTuneKnob'), 50);
-            updateKnobVisual(document.getElementById('envAttack'), 2); updateKnobVisual(document.getElementById('envDecay'), 20);
-            updateKnobVisual(document.getElementById('envSustain'), 10); updateKnobVisual(document.getElementById('envRelease'), 10);
+            setGlobalKnob('clockSpeed', 50); bpm = 40 + (50 / 100) * 200; 
+            setGlobalKnob('portamento', 0); portamentoTime = 0.01; sendMidiPortamento(0);
+            setGlobalKnob('pitchTuneKnob', 50);
+            setGlobalKnob('envAttack', 0); 
+            setGlobalKnob('envDecay', 12.5);
+            setGlobalKnob('envSustain', 10); 
+            setGlobalKnob('envRelease', 4);
 
             resetStep = null; 
             document.querySelectorAll('.patch-point').forEach(el => el.classList.remove('patched', 'patched-b'));
