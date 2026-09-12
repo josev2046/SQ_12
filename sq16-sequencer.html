@@ -8,6 +8,7 @@
     -- MIDI Update 4: CV Calibration mapping --
     -- MIDI Update 5: Sequence Direction logic (FWD/REV/BNC/RND) maps hardware pathing --
     -- MIDI Update 6: Incoming hardware steps now utilize proper ADSR trigger synth --
+    -- MIDI Update 7: Auto-Step Alignment on Pause & Parallel 8-Step collision detection --
 -->
 <html lang="en">
 <head>
@@ -651,7 +652,7 @@
         let isAnalogSyncOn = false;
 
         // --- SQ-1 Hardware-Master State ---
-        let lastHwStepTime = null;
+        let lastHwStepTime = 0;
         let hwStepIntervals = [];
         const HW_TEMPO_SMOOTHING_WINDOW = 4;
         let derivedBpmReady = false;
@@ -1599,26 +1600,50 @@
             knobEl.classList.add('hw-synced');
         }
 
-        function reflectHardwareStep(pitchVal, cVal) {
+        function reflectHardwareStep(pitchVal, cVal, isParallel) {
             const is16 = currentLength === '16';
 
-            advanceStepPointer(null);
-            
+            // Only advance pointer if this is a standard sequential note
+            // (If the SQ-1 is in 8-step parallel, the second note arrives instantly, 
+            // so we don't want to skip ahead to the next step)
+            if (!isParallel) {
+                advanceStepPointer(null);
+            }
+
             const uiStep = currentStep % 8;
-            const ch = (is16 && currentStep >= 8) ? 'B' : 'A';
+            
+            let ch = 'A';
+            if (is16) {
+                ch = currentStep >= 8 ? 'B' : 'A';
+            } else {
+                // In 8-step parallel mode, the second simultaneous note is mapped to B
+                ch = isParallel ? 'B' : 'A'; 
+            }
 
             const clampedPitch = Math.max(-5, Math.min(5, pitchVal));
             const clampedC = Math.max(0, Math.min(5, cVal));
 
             tracks[ch][uiStep] = clampedPitch;
-            tracks.C[uiStep] = clampedC;
+            
+            // Protect C values from parallel note flooding
+            if (!isParallel) tracks.C[uiStep] = clampedC;
 
             const knobPitch = document.querySelector(`.knob[data-ch="${ch}"][data-step="${uiStep}"]`);
-            const knobC = document.querySelector(`.knob[data-ch="C"][data-step="${uiStep}"]`);
-            if (knobPitch) { knobPitch.dataset.val = clampedPitch; updateKnobVisual(knobPitch, clampedPitch); flashHwSync(knobPitch); }
-            if (knobC) { knobC.dataset.val = clampedC; updateKnobVisual(knobC, clampedC); flashHwSync(knobC); }
+            if (knobPitch) { 
+                knobPitch.dataset.val = clampedPitch; 
+                updateKnobVisual(knobPitch, clampedPitch); 
+                flashHwSync(knobPitch); 
+            }
 
-            updateUIForStep(is16);
+            if (!isParallel) {
+                const knobC = document.querySelector(`.knob[data-ch="C"][data-step="${uiStep}"]`);
+                if (knobC) { 
+                    knobC.dataset.val = clampedC; 
+                    updateKnobVisual(knobC, clampedC); 
+                    flashHwSync(knobC); 
+                }
+                updateUIForStep(is16);
+            }
             externalStepActive = true;
         }
 
@@ -1662,7 +1687,7 @@
         }
 
         function deriveHardwareTempo(nowMs) {
-            if (lastHwStepTime !== null) {
+            if (lastHwStepTime !== 0) {
                 const deltaMs = nowMs - lastHwStepTime;
                 if (deltaMs > 40 && deltaMs < 2000) {
                     hwStepIntervals.push(deltaMs);
@@ -1676,14 +1701,12 @@
                     updateResetStatusLine();
                 }
             }
-            lastHwStepTime = nowMs;
         }
 
         function setHardwareOverrideUI(active) {
             hardwareIsMaster = active;
 
-            // Notice we removed playModeBank (Sequence Direction) from the lock list 
-            // so the user can sync the UI's routing with the hardware's physical setup
+            // SEQ DIR is deliberately not locked so you can match the UI routing to the SQ-1's physical selector
             const lockIds = ['startStop-wrap', 'trigRow'];
             lockIds.forEach(id => {
                 const el = document.getElementById(id);
@@ -1702,7 +1725,7 @@
             if (badge) badge.classList.toggle('hidden', !active);
 
             if (!active) {
-                lastHwStepTime = null;
+                lastHwStepTime = 0;
                 hwStepIntervals = [];
                 derivedBpmReady = false;
             }
@@ -1727,6 +1750,8 @@
             }
 
             if (cmd === 0x90 && velocity > 0) {
+                const now = performance.now();
+                
                 if (calArm) {
                     if (calArm === 'min') calZeroNote = note; else calOctaveNote = note;
                     calArm = null;
@@ -1739,13 +1764,34 @@
                 const cVal = (velocity / 127) * 5; 
                 activeExtMidiNote = note;
 
-                if (hardwareIsMaster) deriveHardwareTempo(performance.now());
+                // Auto-Reset Sync: If >1.5s passes without a note, assume SQ-1 was stopped.
+                // Reset our tracker so the next note maps to Step 1.
+                if (now - lastHwStepTime > 1500) {
+                    const maxSteps = currentLength === '16' ? 16 : 8;
+                    if (seqDirection === 'rev') currentStep = maxSteps; 
+                    else currentStep = -1;
+                    bounceDirection = 1;
+                    hwStepIntervals = []; 
+                }
+
+                // Detect 8-Step Parallel Mode (Simultaneous Notes)
+                let isParallel = false;
+                if (now - lastHwStepTime < 15 && lastHwStepTime > 0) {
+                    isParallel = true;
+                }
+
+                if (hardwareIsMaster && !isParallel) {
+                    deriveHardwareTempo(now);
+                }
+                
+                lastHwStepTime = now;
+
                 if (isPlaying) stopSequencer();
 
                 initAudio().then(() => {
                     // Uses triggerSynth for proper ADSR gating rather than continuous sustained preview
                     triggerSynth(pitchVal, cVal, audioCtx.currentTime);
-                    reflectHardwareStep(pitchVal, cVal);
+                    reflectHardwareStep(pitchVal, cVal, isParallel);
                 });
             } else if (cmd === 0x80 || (cmd === 0x90 && velocity === 0)) {
                 if (activeExtMidiNote === note) {
