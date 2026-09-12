@@ -403,7 +403,7 @@
 
                     <div class="panel-divider"></div>
 
-                    <!-- 2. ROUTING & MODE (8-POSITION HARDWARE MATCH) -->
+                    <!-- 2. ROUTING & MODE -->
                     <div class="flex items-center gap-5 relative">
                         <span class="absolute -top-6 left-1/2 -translate-x-1/2 text-[8px] font-bold tracking-widest text-[#82796e] whitespace-nowrap">SEQUENCER MODE</span>
                         
@@ -645,7 +645,7 @@
         // Analog Sync Hook
         let isAnalogSyncOn = false;
 
-        // --- Hardware-Master State ---
+        // --- SQ-C1 Hardware-Master State ---
         let lastHwStepTime = 0;
         let hwStepIntervals = [];
         const HW_TEMPO_SMOOTHING_WINDOW = 4;
@@ -800,12 +800,8 @@
 
         function updateKnobVisual(knobEl, val) {
             if (knobEl.hasAttribute('data-ch')) {
-                const ch = knobEl.dataset.ch;
-                if (ch === 'C') {
-                    knobEl.style.transform = `rotate(${-135 + (val / 5) * 270}deg)`;
-                } else {
-                    knobEl.style.transform = `rotate(${val * 27}deg)`; 
-                }
+                // All SQ-1 CV out is positive unipolar (0-5V)
+                knobEl.style.transform = `rotate(${-135 + (val / 5) * 270}deg)`;
             } else {
                 knobEl.style.transform = `rotate(${-135 + (val / 100) * 270}deg)`;
             }
@@ -1039,9 +1035,8 @@
 
                 if (isSeqKnob) {
                     const ch = activeKnob.dataset.ch;
-                    let newVal;
-                    if (ch === 'C') newVal = Math.max(0, Math.min(5, startVal + (startY - e.clientY) * 0.025));
-                    else newVal = Math.max(-5, Math.min(5, startVal + (startY - e.clientY) * 0.05));
+                    // Restrict all manual UI drags to the hardware-accurate 0-5 range
+                    let newVal = Math.max(0, Math.min(5, startVal + (startY - e.clientY) * 0.025));
                     
                     tracks[ch][activeKnob.dataset.step] = newVal;
                     
@@ -1125,6 +1120,7 @@
                 currentStepDuration = currentStepDuration * Math.max(0.1, (2.1 - cMod));
             }
 
+            // Shield against negative gate times if clock modulation speeds up drastically
             let stepGateTime = Math.max(0.01, currentStepDuration - 0.02);
             let currentPortamento = portamentoTime;
 
@@ -1236,11 +1232,8 @@
                 document.getElementById('ledRow').innerHTML += `<div class="w-[56px] flex justify-center step-indicator" data-step="${i}"><div class="led"></div></div>`;
                 
                 ['A', 'B', 'C'].forEach(ch => {
-                    const isBipolar = (ch === 'A' || ch === 'B');
-                    const defaultVal = isBipolar ? 0 : 2.5; 
-                    const labelsHTML = isBipolar ? 
-                        `<span class="tick-label label-left">-5</span><span class="tick-label label-top">0</span><span class="tick-label label-right">+5</span>` : 
-                        `<span class="tick-label label-left">0</span><span class="tick-label label-right">+5</span>`;
+                    const defaultVal = (ch === 'C') ? 2.5 : 0; 
+                    const labelsHTML = `<span class="tick-label label-left">0</span><span class="tick-label label-right">+5</span>`;
 
                     document.getElementById(`row${ch}`).innerHTML += `
                         <div class="knob-wrapper">
@@ -1643,7 +1636,7 @@
                 ch = isParallel ? 'B' : 'A'; 
             }
 
-            const clampedPitch = Math.max(-5, Math.min(5, pitchVal));
+            const clampedPitch = Math.max(0, Math.min(5, pitchVal));
             const clampedC = Math.max(0, Math.min(5, cVal));
 
             tracks[ch][uiStep] = clampedPitch;
@@ -2014,8 +2007,8 @@
             setOctave(1); setWaveform(0); finePitchTuneSemitones = 0;
             attackTime = 0.01; decayTime = 0.15; sustainLevel = 0.2; releaseTime = 0.2;
             
-            const dafA = [-0.58, -1.00, 0.25, -1.00, 0.00, -1.00, -1.00, 0.00];
-            const dafB = [-1.00, 0.00, -1.00, 0.00, -0.17, -1.00, 0.00, -1.00];
+            const dafA = [2.00, 1.00, 3.50, 1.00, 2.50, 1.00, 1.00, 2.50];
+            const dafB = [1.00, 2.50, 1.00, 2.50, 2.00, 1.00, 2.50, 1.00];
 
             for(let i=0; i<8; i++) {
                 tracks.A[i] = dafA[i]; tracks.B[i] = dafB[i]; tracks.C[i] = 2.5;
@@ -2055,8 +2048,8 @@
             setOctave(1); setWaveform(0); finePitchTuneSemitones = 0;
             attackTime = 0.005; decayTime = 0.12; sustainLevel = 0.1; releaseTime = 0.08;
             
-            const acidA = [-1.00, 0.00, 0.25, -1.00, 0.58, 0.00, -0.17, -1.00];
-            const slideB = [0.00, -5.00, 5.00, -5.00, 5.00, -5.00, 0.00, -5.00];
+            const acidA = [1.00, 2.50, 3.50, 1.00, 4.00, 2.50, 2.00, 1.00];
+            const slideB = [0.00, 0.00, 5.00, 0.00, 5.00, 0.00, 0.00, 0.00];
             const acidC = [4.00, 1.00, 2.50, 4.50, 0.50, 2.50, 3.50, 2.00];
 
             for(let i=0; i<8; i++) {
