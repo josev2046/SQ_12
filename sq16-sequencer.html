@@ -5,15 +5,9 @@
     Voltage & Wave (https://voltageandwave.co.uk/)
     -- Architecture: Converted from 12/24-step to 8/16-step grid matching Korg SQ-1 --
     -- Features: Local WAV Recording, Web MIDI Bidirectional, Analog Audio Sync --
-    -- UI Update: Centered the DAW & Sync Patchbay vertically --
-    -- MIDI Update: Incoming SQ-1 notes now mirror onto the on-screen step/knobs (hardware = master) --
-    -- MIDI Update 2: Tempo is derived from real-time gaps between incoming SQ-1 step notes -- 
-    --                (the SQ-1 does not transmit MIDI Timing Clock over USB, only Note On per step) --
-    -- MIDI Update 3: Transport/step/mode/patch controls visually lock out once the bound MIDI input --
-    --                is confirmed to be an SQ-1, since the hardware is driving the sequence --
-    -- MIDI Update 4: CV Calibration - captures the SQ-1's actual note-per-volt mapping from two --
-    --                known knob positions instead of assuming a fixed 12-semitone/volt scale, so --
-    --                on-screen knob angle (and derived pitch) tracks the physical hardware --
+    -- MIDI Update 4: CV Calibration mapping --
+    -- MIDI Update 5: Sequence Direction logic (FWD/REV/BNC/RND) maps hardware pathing --
+    -- MIDI Update 6: Incoming hardware steps now utilize proper ADSR trigger synth --
 -->
 <html lang="en">
 <head>
@@ -185,8 +179,6 @@
         }
         .knob::after { content: ''; position: absolute; top: 3px; left: 18px; width: 2px; height: 13px; background: #fff; border-radius: 1px; box-shadow: 0 0 2px rgba(255,255,255,0.9); }
 
-        /* Briefly highlights a knob that was just moved by an incoming hardware value,
-           so a tweak on the SQ-1 is visibly confirmed on screen once that step plays. */
         .knob.hw-synced {
             animation: hw-sync-flash 0.6s ease-out;
         }
@@ -195,9 +187,6 @@
             100% { box-shadow: inset 0 1px 2px rgba(255,255,255,0.3), 0 4px 7px rgba(0,0,0,0.35); }
         }
 
-        /* Applied to any control that either contradicts the SQ-1 (transport,
-           manual step, patch reset) or is repurposed as a readout (clock speed)
-           once the hardware is confirmed as the MIDI-in master. */
         .hw-locked {
             opacity: 0.35;
             filter: grayscale(0.7);
@@ -430,12 +419,13 @@
                         </div>
 
                         <div class="flex flex-col items-center justify-center h-full">
-                            <div class="flex flex-col gap-1" id="playModeBank">
-                                <button class="mode-btn" data-play="step">STEP</button>
-                                <button class="mode-btn mode-active" data-play="cont">CONT</button>
-                                <button class="mode-btn" data-play="one">ONCE</button>
+                            <div class="grid grid-cols-2 gap-1 mb-1.5" id="playModeBank">
+                                <button class="mode-btn mode-active" data-dir="fwd" title="Forward">FWD</button>
+                                <button class="mode-btn" data-dir="rev" title="Reverse">REV</button>
+                                <button class="mode-btn" data-dir="bnc" title="Alternate/Bounce">BNC</button>
+                                <button class="mode-btn" data-dir="rnd" title="Random">RND</button>
                             </div>
-                            <span class="text-[8px] font-bold text-[#1f1a14] mt-1.5">MODE</span>
+                            <span class="text-[8px] font-bold text-[#1f1a14]">SEQ DIR</span>
                         </div>
 
                         <div class="flex flex-col items-center gap-1">
@@ -661,16 +651,11 @@
         let isAnalogSyncOn = false;
 
         // --- SQ-1 Hardware-Master State ---
-        // The Korg SQ-1 does not transmit MIDI Timing Clock (0xF8) over USB —
-        // USB-MIDI sync only works in the direction of SQ-1-as-slave. What it
-        // DOES send is a Note On for every step it plays, so tempo is derived
-        // from the real-world gap between consecutive incoming step notes
-        // instead of counting clock ticks that will never arrive.
         let lastHwStepTime = null;
         let hwStepIntervals = [];
         const HW_TEMPO_SMOOTHING_WINDOW = 4;
         let derivedBpmReady = false;
-        let hardwareIsMaster = false; // true once the bound MIDI input is confirmed to be an SQ-1 and MIDI is enabled
+        let hardwareIsMaster = false; 
 
         // --- CV Calibration State ---
         let calArm = null; 
@@ -685,8 +670,8 @@
         let transposeSemitones = 0;
 
         let currentLength = '8';
-        let currentPlayMode = 'cont'; 
-        let activeSeqMode = '8-cont'; 
+        let seqDirection = 'fwd'; 
+        let bounceDirection = 1;
         
         let voltageRangeMultiplier = 1;
         let activeChCDest = 'filter';
@@ -867,8 +852,6 @@
             });
         });
 
-        function updateActiveMode() { activeSeqMode = `${currentLength}-${currentPlayMode}`; }
-
         document.getElementById('lengthRockerBtn').addEventListener('click', async (e) => {
             await initAudio();
             const btn = e.currentTarget;
@@ -879,17 +862,15 @@
                 btn.classList.replace('volt-toggle-bottom', 'volt-toggle-top');
                 currentLength = '8';
             }
-            updateActiveMode();
         });
 
         document.querySelectorAll('#playModeBank .mode-btn').forEach(btn => {
             btn.addEventListener('click', async (e) => {
                 await initAudio();
-                currentPlayMode = e.target.dataset.play;
+                seqDirection = e.target.dataset.dir;
                 document.querySelectorAll('#playModeBank .mode-btn').forEach(b => {
-                    b.classList.toggle('mode-active', b.dataset.play === currentPlayMode);
+                    b.classList.toggle('mode-active', b.dataset.dir === seqDirection);
                 });
-                updateActiveMode();
             });
         });
 
@@ -926,7 +907,7 @@
 
         function sendMidiPitchBend(cents, timestamp = 0) {
             if (!midiOutput || !midiEnabled) return;
-            const range = 200; // General MIDI default: +/- 2 semitones
+            const range = 200; 
             let bend = 8192 + Math.round((cents / range) * 8192);
             bend = Math.max(0, Math.min(16383, bend));
             const msg = [0xE0, bend & 0x7F, (bend >> 7) & 0x7F];
@@ -1051,7 +1032,7 @@
                 if (activeKnob.hasAttribute('data-step')) {
                     const ch = activeKnob.dataset.ch;
                     const uiStep = parseInt(activeKnob.dataset.step);
-                    const is16 = activeSeqMode.startsWith('16');
+                    const is16 = currentLength === '16';
                     const stepIdx = uiStep + (ch === 'B' && is16 ? 8 : 0);
                     
                     let displayVal = parseFloat(activeKnob.dataset.val);
@@ -1063,7 +1044,6 @@
                         let pVal = (ch === 'B') ? tracks.B[uiStep] : tracks.A[uiStep];
                         pVal *= voltageRangeMultiplier;
                         let fVal = tracks.C[uiStep];
-                        // If tweaking Filter C, don't retrigger the ADSR envelope unless a note is already held
                         previewSynth(pVal, fVal, ch !== 'C', false);
                     }
                 }
@@ -1083,7 +1063,7 @@
                     tracks[ch][activeKnob.dataset.step] = newVal;
                     
                     const uiStep = parseInt(activeKnob.dataset.step);
-                    const is16 = activeSeqMode.startsWith('16');
+                    const is16 = currentLength === '16';
                     const stepIdx = uiStep + (ch === 'B' && is16 ? 8 : 0);
                     
                     let displayVal = newVal;
@@ -1165,8 +1145,8 @@
                 osc.stop(time + 0.02);
             }
 
-            // DAW MIDI scheduling with continuous pitch
-            if (midiEnabled && midiOutput) {
+            // DAW MIDI scheduling with continuous pitch (only echo if WE are driving)
+            if (midiEnabled && midiOutput && !hardwareIsMaster) {
                 const { midiNote, cents } = getMidiPitchInfo(semitone);
                 
                 let velocity = 100;
@@ -1212,7 +1192,7 @@
         async function handlePatchClick(e) {
             await initAudio();
             const step = parseInt(e.target.dataset.step);
-            const is16 = activeSeqMode.startsWith('16');
+            const is16 = currentLength === '16';
 
             let txt = "PATCH: NONE";
 
@@ -1394,34 +1374,52 @@
             updateDisplay(currentStep, pVal);
         }
 
-        function scheduleNextStep(manual = false, direction = 1) {
-            const is16 = activeSeqMode.startsWith('16');
+        function advanceStepPointer(overrideDirection = null) {
+            const is16 = currentLength === '16';
             const maxSteps = is16 ? 16 : 8;
             
-            if (direction === 1) {
-                currentStep++;
-                if (currentStep >= maxSteps) {
-                    if (activeSeqMode.endsWith('one') && !manual) { stopSequencer(); return; }
-                    currentStep = 0;
-                }
+            // Physical GUI buttons override seq direction
+            const dir = overrideDirection !== null ? 
+                (overrideDirection === 1 ? 'fwd' : 'rev') : 
+                seqDirection;
                 
-                if (resetStep !== null) {
-                    const hardwareMatch = (resetStep < 8) && ((currentStep % 8) === resetStep);
-                    const absoluteMatch = (resetStep >= 8) && (currentStep === resetStep);
-                    
-                    if (hardwareMatch || absoluteMatch) {
-                        if (activeSeqMode.endsWith('one') && !manual) { stopSequencer(); return; }
-                        currentStep = 0;
-                    }
+            if (dir === 'rnd') {
+                currentStep = Math.floor(Math.random() * maxSteps);
+            } else if (dir === 'bnc') {
+                if (currentStep <= 0) bounceDirection = 1;
+                else if (currentStep >= maxSteps - 1) bounceDirection = -1;
+                
+                if (currentStep >= maxSteps) {
+                    currentStep = maxSteps - 1;
+                    bounceDirection = -1;
+                } else {
+                    currentStep += bounceDirection;
                 }
-            } else {
+            } else if (dir === 'rev') {
                 currentStep--;
-                if (currentStep < 0) {
-                    if (resetStep !== null) currentStep = resetStep - 1;
-                    else currentStep = maxSteps - 1;
-                }
+                if (currentStep < 0) currentStep = maxSteps - 1;
+            } else {
+                // Forward
+                currentStep++;
+                if (currentStep >= maxSteps) currentStep = 0;
             }
             
+            // Handle Reset patch point
+            if (resetStep !== null && dir !== 'rnd') {
+                const hardwareMatch = (resetStep < 8) && ((currentStep % 8) === resetStep);
+                const absoluteMatch = (resetStep >= 8) && (currentStep === resetStep);
+                if (hardwareMatch || absoluteMatch) {
+                    if (dir === 'fwd') currentStep = 0;
+                    else if (dir === 'rev') currentStep = maxSteps - 1;
+                    else if (dir === 'bnc') currentStep = (bounceDirection === 1) ? 0 : maxSteps - 1;
+                }
+            }
+        }
+
+        function scheduleNextStep(manual = false, direction = 1) {
+            const is16 = currentLength === '16';
+            
+            advanceStepPointer(manual ? direction : null);
             updateUIForStep(is16);
 
             const uiStep = currentStep % 8;
@@ -1433,7 +1431,7 @@
         }
 
         async function scheduler() {
-            if(!isPlaying || activeSeqMode.endsWith('step')) return; 
+            if(!isPlaying) return; 
             
             if(audioCtx && audioCtx.state === 'suspended') await audioCtx.resume();
 
@@ -1458,7 +1456,7 @@
             
             if(isPlaying) {
                 stopSequencer();
-            } else if (!activeSeqMode.endsWith('step')) { 
+            } else { 
                 isPlaying = true;
                 btn.classList.add('is-active');
                 led.classList.replace('bg-red-400', 'bg-red-200');
@@ -1479,7 +1477,6 @@
         const midiInSelect = document.getElementById('midiInSelect');
         const midiOutSelect = document.getElementById('midiOutSelect');
 
-        // Recording to a local WAV file (MediaRecorder + re-encode)
         if (typeof MediaRecorder === 'undefined') {
             btnRecord.disabled = true;
             btnRecord.innerText = 'REC N/A';
@@ -1603,10 +1600,10 @@
         }
 
         function reflectHardwareStep(pitchVal, cVal) {
-            const is16 = activeSeqMode.startsWith('16');
-            const maxSteps = is16 ? 16 : 8;
+            const is16 = currentLength === '16';
 
-            currentStep = (currentStep + 1) % maxSteps;
+            advanceStepPointer(null);
+            
             const uiStep = currentStep % 8;
             const ch = (is16 && currentStep >= 8) ? 'B' : 'A';
 
@@ -1644,15 +1641,12 @@
             if (m) m.innerText = txt;
         }
 
-        // Reconstructs the exact voltage based on a 1V/Octave baseline.
         function pitchFromMidiNote(note) {
             if (calZeroNote !== null && calOctaveNote !== null && calOctaveNote !== calZeroNote) {
-                // Strict mapping based on user's defined 1-Volt note gap
                 const notesPerVolt = calOctaveNote - calZeroNote;
                 return (note - calZeroNote) / notesPerVolt;
             }
-            // Default common ground: C3 (48) is 0V center, 12 notes per volt.
-            return (note - 48) / 12; 
+            return (note - 36) / 12; 
         }
 
         function noteLabel(n) {
@@ -1688,7 +1682,9 @@
         function setHardwareOverrideUI(active) {
             hardwareIsMaster = active;
 
-            const lockIds = ['startStop-wrap', 'playModeBank', 'trigRow'];
+            // Notice we removed playModeBank (Sequence Direction) from the lock list 
+            // so the user can sync the UI's routing with the hardware's physical setup
+            const lockIds = ['startStop-wrap', 'trigRow'];
             lockIds.forEach(id => {
                 const el = document.getElementById(id);
                 if (!el) return;
@@ -1744,18 +1740,17 @@
                 activeExtMidiNote = note;
 
                 if (hardwareIsMaster) deriveHardwareTempo(performance.now());
-
                 if (isPlaying) stopSequencer();
 
                 initAudio().then(() => {
-                    previewSynth(pitchVal, cVal, true, true);
+                    // Uses triggerSynth for proper ADSR gating rather than continuous sustained preview
+                    triggerSynth(pitchVal, cVal, audioCtx.currentTime);
                     reflectHardwareStep(pitchVal, cVal);
                 });
             } else if (cmd === 0x80 || (cmd === 0x90 && velocity === 0)) {
                 if (activeExtMidiNote === note) {
                     activeExtMidiNote = null;
-                    stopPreview(true);
-
+                    
                     if (externalStepActive) {
                         document.querySelectorAll('.step-indicator').forEach(el => el.classList.remove('active'));
                         document.getElementById('pilotA').classList.remove('pilot-active');
@@ -1943,9 +1938,10 @@
             voltageRangeMultiplier = 1;
             document.getElementById('voltRockerBtn').className = "volt-rocker volt-toggle-top";
 
-            currentLength = '16'; currentPlayMode = 'cont'; updateActiveMode();
+            currentLength = '16'; 
+            seqDirection = 'fwd'; 
             document.getElementById('lengthRockerBtn').className = "volt-rocker volt-toggle-bottom";
-            document.querySelectorAll('#playModeBank .mode-btn').forEach(b => b.classList.toggle('mode-active', b.dataset.play === 'cont'));
+            document.querySelectorAll('#playModeBank .mode-btn').forEach(b => b.classList.toggle('mode-active', b.dataset.dir === 'fwd'));
 
             activeChCDest = 'filter';
             document.querySelectorAll('#chCDestBank .dest-btn').forEach(b => b.classList.toggle('dest-active', b.dataset.dest === 'filter'));
@@ -1985,9 +1981,10 @@
             voltageRangeMultiplier = 1;
             document.getElementById('voltRockerBtn').className = "volt-rocker volt-toggle-top";
 
-            currentLength = '8'; currentPlayMode = 'cont'; updateActiveMode();
+            currentLength = '8'; 
+            seqDirection = 'fwd';
             document.getElementById('lengthRockerBtn').className = "volt-rocker volt-toggle-top";
-            document.querySelectorAll('#playModeBank .mode-btn').forEach(b => b.classList.toggle('mode-active', b.dataset.play === 'cont'));
+            document.querySelectorAll('#playModeBank .mode-btn').forEach(b => b.classList.toggle('mode-active', b.dataset.dir === 'fwd'));
 
             activeChCDest = 'filter';
             document.querySelectorAll('#chCDestBank .dest-btn').forEach(b => b.classList.toggle('dest-active', b.dataset.dest === 'filter'));
