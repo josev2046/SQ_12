@@ -177,6 +177,16 @@
             transition: transform 0.08s cubic-bezier(0.2, 0.8, 0.2, 1);
         }
         .knob::after { content: ''; position: absolute; top: 3px; left: 18px; width: 2px; height: 13px; background: #fff; border-radius: 1px; box-shadow: 0 0 2px rgba(255,255,255,0.9); }
+
+        /* Briefly highlights a knob that was just moved by an incoming hardware value,
+           so a tweak on the SQ-1 is visibly confirmed on screen once that step plays. */
+        .knob.hw-synced {
+            animation: hw-sync-flash 0.6s ease-out;
+        }
+        @keyframes hw-sync-flash {
+            0%   { box-shadow: 0 0 0 6px rgba(212, 175, 55, 0.85), inset 0 1px 2px rgba(255,255,255,0.3), 0 4px 7px rgba(0,0,0,0.35); }
+            100% { box-shadow: inset 0 1px 2px rgba(255,255,255,0.3), 0 4px 7px rgba(0,0,0,0.35); }
+        }
         
         .row-label { width: 55px; font-weight: bold; font-size: 12px; text-align: right; color: #1f1a14; margin-right: 16px; display: flex; align-items: center; justify-content: flex-end; gap: 6px; line-height: 1.1; flex-shrink: 0; }
         
@@ -1543,6 +1553,14 @@
         // of our own while the hardware is driving.
         let externalStepActive = false;
 
+        function flashHwSync(knobEl) {
+            // Restart the animation even if this knob was already flashing
+            // (e.g. the SQ-1 looped back around to the same step quickly).
+            knobEl.classList.remove('hw-synced');
+            void knobEl.offsetWidth; // force reflow so the animation re-triggers
+            knobEl.classList.add('hw-synced');
+        }
+
         function reflectHardwareStep(pitchVal, cVal) {
             const is16 = activeSeqMode.startsWith('16');
             const maxSteps = is16 ? 16 : 8;
@@ -1563,8 +1581,8 @@
 
             const knobPitch = document.querySelector(`.knob[data-ch="${ch}"][data-step="${uiStep}"]`);
             const knobC = document.querySelector(`.knob[data-ch="C"][data-step="${uiStep}"]`);
-            if (knobPitch) { knobPitch.dataset.val = clampedPitch; updateKnobVisual(knobPitch, clampedPitch); }
-            if (knobC) { knobC.dataset.val = clampedC; updateKnobVisual(knobC, clampedC); }
+            if (knobPitch) { knobPitch.dataset.val = clampedPitch; updateKnobVisual(knobPitch, clampedPitch); flashHwSync(knobPitch); }
+            if (knobC) { knobC.dataset.val = clampedC; updateKnobVisual(knobC, clampedC); flashHwSync(knobC); }
 
             // Reuses the same LED/pilot/CRT update path the internal sequencer uses,
             // so the step light and readout genuinely reflect the hardware's position.
