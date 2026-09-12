@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!-- 
-    SQ-1 Companion (Web MIDI Sequencer & Audio Interface)
+    SQ-C1 Companion (Web MIDI Sequencer & Audio Interface)
     Created & Developed by Jose Velazquez MA
     Voltage & Wave (https://voltageandwave.co.uk/)
     -- Architecture: Grid matches Korg SQ-1 hardware --
@@ -11,7 +11,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>SQ-1 Companion</title>
+    <title>SQ-C1 Companion</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body { 
@@ -300,23 +300,23 @@
                     <div class="flex items-center gap-1.5 select-none">
                         <div class="logo-panel-accent w-10 h-11 rounded flex flex-col items-center justify-center relative">
                             <span class="logo-char font-mono font-black text-xl tracking-tighter leading-none">S</span>
-                            <span class="text-[6px] font-bold text-[#ff9d93]/60 tracking-widest mt-0.5">MOD</span>
+                            <span class="text-[6px] font-bold text-[#ff9d93]/60 tracking-widest mt-0.5">SEQ</span>
                         </div>
                         <div class="logo-panel-accent w-10 h-11 rounded flex flex-col items-center justify-between py-1 relative">
                             <span class="logo-char font-mono font-black text-xl tracking-tighter leading-none mt-0.5">Q</span>
                             <div class="patch-jack-dot mb-0.5" title="Signal Peak LED"></div>
                         </div>
                         <div class="logo-panel w-10 h-11 rounded flex flex-col items-center justify-center relative ml-1">
-                            <span class="logo-char font-mono font-black text-xl tracking-tighter leading-none">1</span>
-                            <span class="text-[6px] font-bold text-[#82796e] tracking-widest mt-0.5">CH</span>
+                            <span class="logo-char font-mono font-black text-xl tracking-tighter leading-none">C</span>
+                            <span class="text-[6px] font-bold text-[#82796e] tracking-widest mt-0.5">COMP</span>
                         </div>
                         <div class="logo-panel w-10 h-11 rounded flex flex-col items-center justify-center relative">
-                            <span class="logo-char font-mono font-black text-xl tracking-tighter leading-none">6</span>
-                            <span class="text-[6px] font-bold text-[#82796e] tracking-widest mt-0.5">OUT</span>
+                            <span class="logo-char font-mono font-black text-xl tracking-tighter leading-none">1</span>
+                            <span class="text-[6px] font-bold text-[#82796e] tracking-widest mt-0.5">MK1</span>
                         </div>
                     </div>
                     <div class="flex items-center justify-between w-full text-[8px] font-mono font-bold tracking-widest text-[#38342e] border-t border-[#38342e]/30 pt-1">
-                        <span>SQ-1 COMPANION</span>
+                        <span>SQ-C1 COMPANION</span>
                         <span class="text-[#c83a2a]">•</span>
                         <span>VCA / GATE</span>
                     </div>
@@ -563,7 +563,7 @@
                                 <option>OUT: Checking...</option>
                             </select>
                             <div id="hwMasterBadge" class="hidden text-[7px] font-black text-[#c83a2a] tracking-widest text-center w-full leading-tight mt-0.5">
-                                SQ-1 IS MASTER<br/>TRANSPORT LOCKED
+                                SQ-C1 IS MASTER<br/>TRANSPORT LOCKED
                             </div>
                         </div>
 
@@ -636,6 +636,7 @@
         let midiInput = null;
         let midiOutput = null;
         let midiEnabled = false;
+        let userDisabledMidi = false; 
         let activePreviewMidiNote = null;
         let activeExtMidiNote = null;
         const activeExtMidiNotes = new Set();
@@ -644,7 +645,7 @@
         // Analog Sync Hook
         let isAnalogSyncOn = false;
 
-        // --- SQ-1 Hardware-Master State ---
+        // --- Hardware-Master State ---
         let lastHwStepTime = 0;
         let hwStepIntervals = [];
         const HW_TEMPO_SMOOTHING_WINDOW = 4;
@@ -663,7 +664,7 @@
         let isPreviewing = false;
         let transposeSemitones = 0;
 
-        // Mirrors the 8 modes on the SQ-1 Physical Dial
+        // Mirrors the 8 modes on the Physical Dial
         let seqMode = 'order'; 
         let bounceDirection = 1;
         const is16Mode = () => ['order', 'alt', 'random'].includes(seqMode);
@@ -1124,14 +1125,14 @@
                 currentStepDuration = currentStepDuration * Math.max(0.1, (2.1 - cMod));
             }
 
-            let stepGateTime = Math.max(0.05, currentStepDuration - 0.02);
+            let stepGateTime = Math.max(0.01, currentStepDuration - 0.02);
             let currentPortamento = portamentoTime;
 
             // Apply Row B internally as Duty/Slide parameters matching SQ-1 physical modes
             if (seqMode === 'cv-duty' || seqMode === 'cv-rnd') {
                 const bVal = tracks.B[uiStep] * voltageRangeMultiplier;
                 const dutyRatio = Math.max(0.05, Math.min(1.0, 0.1 + ((bVal + 5) / 10) * 0.9));
-                stepGateTime = currentStepDuration * dutyRatio;
+                stepGateTime = Math.max(0.01, currentStepDuration * dutyRatio);
             } else if (seqMode === 'cv-slide') {
                 const bVal = tracks.B[uiStep] * voltageRangeMultiplier;
                 currentPortamento = Math.max(0, Math.min(0.5, 0.01 + ((bVal + 5) / 10) * 0.49));
@@ -1420,6 +1421,9 @@
                 currentStep = (currentStep + 1) % maxSteps;
             }
 
+            // Ensure we clamp safely into boundaries and never fetch tracks[-1]
+            currentStep = ((currentStep % maxSteps) + maxSteps) % maxSteps;
+
             if (resetStep !== null && seqMode !== 'random' && seqMode !== 'cv-rnd') {
                 const hardwareMatch = (resetStep < 8) && ((currentStep % 8) === resetStep);
                 const absoluteMatch = (resetStep >= 8) && (currentStep === resetStep);
@@ -1614,7 +1618,7 @@
             const d = new Date();
             const pad = (n) => String(n).padStart(2, '0');
             const stamp = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}_${pad(d.getHours())}-${pad(d.getMinutes())}-${pad(d.getSeconds())}`;
-            return `sq1-recording-${stamp}.${ext}`;
+            return `sqc1-recording-${stamp}.${ext}`;
         }
 
         let externalStepActive = false;
@@ -1731,13 +1735,13 @@
                 const el = document.getElementById(id);
                 if (!el) return;
                 el.classList.toggle('hw-locked', active);
-                el.title = active ? 'Disabled — the SQ-1 is driving the sequence' : '';
+                el.title = active ? 'Disabled — hardware is driving the sequence' : '';
             });
 
             const clockKnobWrapper = document.getElementById('clockSpeed')?.closest('.knob-wrapper');
             if (clockKnobWrapper) {
                 clockKnobWrapper.classList.toggle('hw-locked', active);
-                clockKnobWrapper.title = active ? 'Tempo is detected from the SQ-1, not set here' : '';
+                clockKnobWrapper.title = active ? 'Tempo is detected from hardware, not set here' : '';
             }
 
             const badge = document.getElementById('hwMasterBadge');
@@ -1882,7 +1886,7 @@
                 }
             }
 
-            if (sq1Detected && !midiEnabled) {
+            if (sq1Detected && !midiEnabled && !userDisabledMidi) {
                 midiEnabled = true;
                 btnMidi.classList.add('active-toggle');
                 btnMidi.classList.add('text-[#fff]', 'border-[#ff8878]', 'shadow-[0_0_10px_rgba(200,58,42,0.8)]');
@@ -1908,6 +1912,7 @@
 
         btnMidi.addEventListener('click', () => {
             midiEnabled = !midiEnabled;
+            userDisabledMidi = !midiEnabled;
             btnMidi.classList.toggle('active-toggle', midiEnabled);
             
             if (midiEnabled) {
