@@ -7,6 +7,10 @@
     -- Features: Local WAV Recording, Web MIDI Bidirectional, Analog Audio Sync --
     -- UI Update: Centered the DAW & Sync Patchbay vertically --
     -- MIDI Update: Incoming SQ-1 notes now mirror onto the on-screen step/knobs (hardware = master) --
+    -- MIDI Update 2: Tempo is derived from real-time gaps between incoming SQ-1 step notes -- 
+    --                (the SQ-1 does not transmit MIDI Timing Clock over USB, only Note On per step) --
+    -- MIDI Update 3: Transport/step/mode/patch controls visually lock out once the bound MIDI input --
+    --                is confirmed to be an SQ-1, since the hardware is driving the sequence --
 -->
 <html lang="en">
 <head>
@@ -187,6 +191,16 @@
             0%   { box-shadow: 0 0 0 6px rgba(212, 175, 55, 0.85), inset 0 1px 2px rgba(255,255,255,0.3), 0 4px 7px rgba(0,0,0,0.35); }
             100% { box-shadow: inset 0 1px 2px rgba(255,255,255,0.3), 0 4px 7px rgba(0,0,0,0.35); }
         }
+
+        /* Applied to any control that either contradicts the SQ-1 (transport,
+           manual step, patch reset) or is repurposed as a readout (clock speed)
+           once the hardware is confirmed as the MIDI-in master. */
+        .hw-locked {
+            opacity: 0.35;
+            filter: grayscale(0.7);
+            pointer-events: none;
+            transition: opacity 0.2s ease, filter 0.2s ease;
+        }
         
         .row-label { width: 55px; font-weight: bold; font-size: 12px; text-align: right; color: #1f1a14; margin-right: 16px; display: flex; align-items: center; justify-content: flex-end; gap: 6px; line-height: 1.1; flex-shrink: 0; }
         
@@ -356,7 +370,7 @@
                     <div class="flex items-center gap-4 relative">
                         <span class="absolute -top-6 left-1/2 -translate-x-1/2 text-[8px] font-bold tracking-widest text-[#82796e] whitespace-nowrap">TRANSPORT / CLOCK</span>
                         
-                        <div class="flex flex-col gap-2 justify-center w-[110px]">
+                        <div class="flex flex-col gap-2 justify-center w-[110px]" id="startStop-wrap">
                             <button id="startStop" class="rocker-button text-white px-3 py-1.5 font-black rounded-sm flex items-center justify-center gap-2 w-full">
                                 <span class="w-1.5 h-1.5 rounded-full bg-red-400 opacity-60" id="rockerLed"></span>
                                 <svg width="16" height="12" viewBox="0 0 20 14" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
@@ -563,6 +577,9 @@
                             <select id="midiOutSelect" class="text-[7px] font-bold text-[#5a544a] bg-[#e2dbc8] border border-[#38342e]/30 rounded px-1 py-1 w-full truncate" title="MIDI Output">
                                 <option>OUT: Checking...</option>
                             </select>
+                            <div id="hwMasterBadge" class="hidden text-[7px] font-black text-[#c83a2a] tracking-widest text-center w-full leading-tight mt-0.5">
+                                SQ-1 IS MASTER<br/>TRANSPORT LOCKED
+                            </div>
                         </div>
 
                         <!-- ANALOG SYNC -->
@@ -629,9 +646,22 @@
         // Analog Sync Hook
         let isAnalogSyncOn = false;
 
+        // --- SQ-1 Hardware-Master State ---
+        // The Korg SQ-1 does not transmit MIDI Timing Clock (0xF8) over USB —
+        // USB-MIDI sync only works in the direction of SQ-1-as-slave. What it
+        // DOES send is a Note On for every step it plays, so tempo is derived
+        // from the real-world gap between consecutive incoming step notes
+        // instead of counting clock ticks that will never arrive.
+        let lastHwStepTime = null;
+        let hwStepIntervals = [];
+        const HW_TEMPO_SMOOTHING_WINDOW = 4;
+        let derivedBpmReady = false;
+        let hardwareIsMaster = false; // true once the bound MIDI input is confirmed to be an SQ-1 and MIDI is enabled
+
         let bpm = 120;
         let portamentoTime = 0.01;
         let resetStep = null;
+        let currentPatchLabel = "PATCH: NONE";
         let isPreviewing = false;
         let transposeSemitones = 0;
 
@@ -1163,8 +1193,6 @@
         async function handlePatchClick(e) {
             await initAudio();
             const step = parseInt(e.target.dataset.step);
-            const statusTextDesktop = document.getElementById('resetStatus');
-            const statusTextMobile = document.getElementById('resetStatusMobile');
             const is16 = activeSeqMode.startsWith('16');
 
             let txt = "PATCH: NONE";
@@ -1189,8 +1217,8 @@
                 txt = `RESET: STEP ${step + 1}`;
             }
 
-            if (statusTextDesktop) statusTextDesktop.innerText = txt;
-            if (statusTextMobile) statusTextMobile.innerText = txt;
+            currentPatchLabel = txt;
+            updateResetStatusLine();
         }
 
         function renderGrid() {
@@ -1590,6 +1618,86 @@
             externalStepActive = true;
         }
 
+        // --- SQ-1 Tempo Detection (from note timing, not MIDI clock) ---
+        function isSq1DeviceName(name) {
+            return !!name && (name.toUpperCase().includes('SQ-1') || name.toUpperCase().includes('SQ1'));
+        }
+
+        function updateResetStatusLine() {
+            let txt;
+            if (hardwareIsMaster) {
+                txt = derivedBpmReady ? `EXT BPM: ${Math.round(bpm)}` : 'EXT BPM: --';
+            } else {
+                txt = currentPatchLabel;
+            }
+            const d = document.getElementById('resetStatus');
+            const m = document.getElementById('resetStatusMobile');
+            if (d) d.innerText = txt;
+            if (m) m.innerText = txt;
+        }
+
+        function deriveHardwareTempo(nowMs) {
+            if (lastHwStepTime !== null) {
+                const deltaMs = nowMs - lastHwStepTime;
+                // Only trust plausible 16th-note gaps between steps. Anything
+                // shorter looks like a glitch/double-fire; anything longer means
+                // the SQ-1 paused (or we just reconnected) and shouldn't skew
+                // the running average.
+                if (deltaMs > 40 && deltaMs < 2000) {
+                    hwStepIntervals.push(deltaMs);
+                    if (hwStepIntervals.length > HW_TEMPO_SMOOTHING_WINDOW) hwStepIntervals.shift();
+                    const avgMs = hwStepIntervals.reduce((a, b) => a + b, 0) / hwStepIntervals.length;
+                    // Each Note On the SQ-1 sends is one step; running normally
+                    // that's a 16th note, so 4 steps = 1 quarter-note beat.
+                    const derivedBpm = 60000 / (avgMs * 4);
+                    bpm = Math.max(20, Math.min(300, derivedBpm));
+                    derivedBpmReady = true;
+                    const knobVal = Math.max(0, Math.min(100, ((bpm - 40) / 200) * 100));
+                    setGlobalKnob('clockSpeed', knobVal);
+                    updateResetStatusLine();
+                }
+            }
+            lastHwStepTime = nowMs;
+        }
+
+        function setHardwareOverrideUI(active) {
+            hardwareIsMaster = active;
+
+            // These controls either fight the hardware (transport, manual step,
+            // patch reset) or are meaningless while it's driving (play mode,
+            // clock speed — now a live readout instead of an input), so grey
+            // them out and stop accepting input rather than let them quietly
+            // do nothing or contradict what the SQ-1 is actually doing.
+            const lockIds = ['startStop-wrap', 'playModeBank', 'trigRow'];
+            lockIds.forEach(id => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                el.classList.toggle('hw-locked', active);
+                el.title = active ? 'Disabled — the SQ-1 is driving the sequence' : '';
+            });
+
+            const clockKnobWrapper = document.getElementById('clockSpeed')?.closest('.knob-wrapper');
+            if (clockKnobWrapper) {
+                clockKnobWrapper.classList.toggle('hw-locked', active);
+                clockKnobWrapper.title = active ? 'Tempo is detected from the SQ-1, not set here' : '';
+            }
+
+            const badge = document.getElementById('hwMasterBadge');
+            if (badge) badge.classList.toggle('hidden', !active);
+
+            if (!active) {
+                lastHwStepTime = null;
+                hwStepIntervals = [];
+                derivedBpmReady = false;
+            }
+            updateResetStatusLine();
+        }
+
+        function refreshHardwareMasterState() {
+            const active = !!(midiEnabled && midiInput && isSq1DeviceName(midiInput.name));
+            if (active !== hardwareIsMaster) setHardwareOverrideUI(active);
+        }
+
         function handleMidiMessage(event) {
             const [status, note, velocity] = event.data;
             const cmd = status & 0xF0;
@@ -1606,6 +1714,11 @@
                 const pitchVal = (note - 36) / 12; // Base C2 = 36
                 const cVal = (velocity / 127) * 5; // Velocity maps to CH-C (0-5V)
                 activeExtMidiNote = note;
+
+                // Measure the real-world gap since the last step note to derive
+                // tempo — this is the only sync data the SQ-1 actually gives us
+                // over USB, since it never sends 0xF8 clock.
+                if (hardwareIsMaster) deriveHardwareTempo(performance.now());
 
                 // Hardware is master: our own transport must not also be generating
                 // steps while the SQ-1 is feeding us its sequence, or we'd double-trigger.
@@ -1640,6 +1753,7 @@
                 midiInSelect.value = midiInput.id;
                 midiInput.onmidimessage = handleMidiMessage;
             }
+            refreshHardwareMasterState();
         }
 
         function populateMidiIO() {
@@ -1707,6 +1821,7 @@
                 // If it was auto-linked but the device disappeared
                 btnMidi.innerText = 'MIDI: ON';
             }
+            refreshHardwareMasterState();
         }
 
         midiInSelect.addEventListener('change', () => {
@@ -1750,6 +1865,7 @@
                     stopPreview(true);
                 }
             }
+            refreshHardwareMasterState();
         });
 
         async function initMidi() {
@@ -1816,8 +1932,8 @@
             resetStep = null; 
             document.querySelectorAll('.patch-point').forEach(el => el.classList.remove('patched', 'patched-b'));
 
-            if (document.getElementById('resetStatus')) document.getElementById('resetStatus').innerText = "PATCH: NONE";
-            if (document.getElementById('resetStatusMobile')) document.getElementById('resetStatusMobile').innerText = "PATCH: NONE";
+            currentPatchLabel = "PATCH: NONE";
+            updateResetStatusLine();
         });
 
         document.getElementById('demo2Btn').addEventListener('click', async () => {
@@ -1858,8 +1974,8 @@
             resetStep = null; 
             document.querySelectorAll('.patch-point').forEach(el => el.classList.remove('patched', 'patched-b'));
 
-            if (document.getElementById('resetStatus')) document.getElementById('resetStatus').innerText = "PATCH: NONE";
-            if (document.getElementById('resetStatusMobile')) document.getElementById('resetStatusMobile').innerText = "PATCH: NONE";
+            currentPatchLabel = "PATCH: NONE";
+            updateResetStatusLine();
         });
 
         renderGrid();
