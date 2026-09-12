@@ -544,7 +544,7 @@
 
             <!-- SEQUENCER GRID + DAW MODULE -->
             <div class="panel-outline w-full overflow-x-auto grid-scroll mb-6 !py-8 !px-4">
-                <div class="flex items-stretch justify-center w-full min-w-max gap-8 px-2">
+                <div class="flex items-center justify-center w-full min-w-max gap-8 px-2">
                     
                     <!-- Left: Main Sequencer Matrix -->
                     <div class="flex flex-col gap-6 flex-shrink-0">
@@ -556,9 +556,9 @@
                     </div>
 
                     <!-- Divider -->
-                    <div class="w-[1.5px] bg-gradient-to-b from-transparent via-[#38342e]/30 to-transparent flex-shrink-0"></div>
+                    <div class="w-[1.5px] self-stretch bg-gradient-to-b from-transparent via-[#38342e]/30 to-transparent flex-shrink-0"></div>
 
-                    <!-- Right: DAW & Sync Patchbay (Centered Vertically) -->
+                    <!-- Right: DAW & Sync Patchbay -->
                     <div class="flex flex-col items-center justify-center py-1 flex-shrink-0 w-[120px] gap-3">
                         <div class="text-[8px] font-bold tracking-widest text-[#82796e] text-center mb-1">DAW & EXT SYNC</div>
                         
@@ -589,10 +589,10 @@
                         <div class="w-full flex flex-col gap-1.5 p-2 bg-[#38342e]/5 border border-[#38342e]/20 rounded">
                             <span class="text-[7px] font-bold text-[#1f1a14] text-center w-full">CV CALIBRATION</span>
                             <div class="flex gap-1 w-full">
-                                <button id="btnCalMin" class="tactile-button px-1 py-1.5 rounded text-[8px] font-bold flex-1" title="Turn a knob fully to its minimum, click this, then trigger that step">SET MIN</button>
-                                <button id="btnCalMax" class="tactile-button px-1 py-1.5 rounded text-[8px] font-bold flex-1" title="Turn a knob fully to its maximum, click this, then trigger that step">SET MAX</button>
+                                <button id="btnCalMin" class="tactile-button px-1 py-1.5 rounded text-[8px] font-bold flex-1" title="Set a knob to Center (0V), click this, then trigger">SET 0V</button>
+                                <button id="btnCalMax" class="tactile-button px-1 py-1.5 rounded text-[8px] font-bold flex-1" title="Set a knob 1 Octave up (+1V), click this, then trigger">SET +1V</button>
                             </div>
-                            <div id="calReadout" class="text-[7px] font-bold text-[#1f1a14] text-center w-full">MIN:-- MAX:--</div>
+                            <div id="calReadout" class="text-[7px] font-bold text-[#1f1a14] text-center w-full">0V:-- +1V:--</div>
                             <button id="btnCalReset" class="tactile-button px-2 py-1 rounded text-[8px] font-bold w-full opacity-70">RESET CAL</button>
                         </div>
 
@@ -673,14 +673,9 @@
         let hardwareIsMaster = false; // true once the bound MIDI input is confirmed to be an SQ-1 and MIDI is enabled
 
         // --- CV Calibration State ---
-        // The SQ-1 reports knob position as a MIDI note, but we don't actually know
-        // its note-per-volt mapping - assuming a fixed 12-semitone/volt scale from a
-        // guessed base note is what caused the on-screen knob angle to drift from the
-        // physical one. Capturing the real note at two known knob positions (min/max)
-        // lets us reconstruct volts from any incoming note with the hardware's own scale.
-        let calArm = null; // 'min' | 'max' | null - which extreme we're waiting to capture
-        let calMinNote = null;
-        let calMaxNote = null;
+        let calArm = null; 
+        let calZeroNote = null;
+        let calOctaveNote = null;
 
         let bpm = 120;
         let portamentoTime = 0.01;
@@ -1599,17 +1594,11 @@
             return `sq16-recording-${stamp}.${ext}`;
         }
 
-        // The SQ-1 is always the master clock/sequence when it's talking to us: every
-        // Note On it sends represents "the hardware just advanced to its next step".
-        // We mirror that onto our own step pointer + knobs, we never generate steps
-        // of our own while the hardware is driving.
         let externalStepActive = false;
 
         function flashHwSync(knobEl) {
-            // Restart the animation even if this knob was already flashing
-            // (e.g. the SQ-1 looped back around to the same step quickly).
             knobEl.classList.remove('hw-synced');
-            void knobEl.offsetWidth; // force reflow so the animation re-triggers
+            void knobEl.offsetWidth;
             knobEl.classList.add('hw-synced');
         }
 
@@ -1617,14 +1606,10 @@
             const is16 = activeSeqMode.startsWith('16');
             const maxSteps = is16 ? 16 : 8;
 
-            // Advance our own step pointer in lock-step with the incoming note,
-            // so the LED / CH pilot / CRT readout track the hardware's position.
             currentStep = (currentStep + 1) % maxSteps;
             const uiStep = currentStep % 8;
             const ch = (is16 && currentStep >= 8) ? 'B' : 'A';
 
-            // Knobs only travel -5..+5V (or 0..5V for CH-C) - clamp incoming CV so
-            // an out-of-range hardware note can't leave a knob pinned or invisible.
             const clampedPitch = Math.max(-5, Math.min(5, pitchVal));
             const clampedC = Math.max(0, Math.min(5, cVal));
 
@@ -1636,13 +1621,10 @@
             if (knobPitch) { knobPitch.dataset.val = clampedPitch; updateKnobVisual(knobPitch, clampedPitch); flashHwSync(knobPitch); }
             if (knobC) { knobC.dataset.val = clampedC; updateKnobVisual(knobC, clampedC); flashHwSync(knobC); }
 
-            // Reuses the same LED/pilot/CRT update path the internal sequencer uses,
-            // so the step light and readout genuinely reflect the hardware's position.
             updateUIForStep(is16);
             externalStepActive = true;
         }
 
-        // --- SQ-1 Tempo Detection (from note timing, not MIDI clock) ---
         function isSq1DeviceName(name) {
             return !!name && (name.toUpperCase().includes('SQ-1') || name.toUpperCase().includes('SQ1'));
         }
@@ -1650,7 +1632,7 @@
         function updateResetStatusLine() {
             let txt;
             if (calArm) {
-                txt = calArm === 'min' ? 'CAL: TRIGGER MIN STEP' : 'CAL: TRIGGER MAX STEP';
+                txt = calArm === 'min' ? 'CAL: TRIGGER 0V STEP' : 'CAL: TRIGGER +1V STEP';
             } else if (hardwareIsMaster) {
                 txt = derivedBpmReady ? `EXT BPM: ${Math.round(bpm)}` : 'EXT BPM: --';
             } else {
@@ -1662,17 +1644,15 @@
             if (m) m.innerText = txt;
         }
 
-        // Reconstructs the volt value a physical knob is sitting at from an incoming
-        // MIDI note. Uses the two calibrated reference points if we have them;
-        // otherwise falls back to the original guessed 1V/oct-from-C2 scale.
+        // Reconstructs the exact voltage based on a 1V/Octave baseline.
         function pitchFromMidiNote(note) {
-            if (calMinNote !== null && calMaxNote !== null && calMaxNote !== calMinNote) {
-                const lo = Math.min(calMinNote, calMaxNote);
-                const hi = Math.max(calMinNote, calMaxNote);
-                const t = (note - lo) / (hi - lo); // 0 at captured min, 1 at captured max
-                return -5 + t * 10; // SQ-1's CV range is a fixed -5..+5V swing
+            if (calZeroNote !== null && calOctaveNote !== null && calOctaveNote !== calZeroNote) {
+                // Strict mapping based on user's defined 1-Volt note gap
+                const notesPerVolt = calOctaveNote - calZeroNote;
+                return (note - calZeroNote) / notesPerVolt;
             }
-            return (note - 36) / 12; // fallback: assume C2 = 0V, 12 semitones/volt
+            // Default common ground: C3 (48) is 0V center, 12 notes per volt.
+            return (note - 48) / 12; 
         }
 
         function noteLabel(n) {
@@ -1684,22 +1664,16 @@
 
         function updateCalReadout() {
             const el = document.getElementById('calReadout');
-            if (el) el.innerText = `MIN:${noteLabel(calMinNote)} MAX:${noteLabel(calMaxNote)}`;
+            if (el) el.innerText = `0V:${noteLabel(calZeroNote)} +1V:${noteLabel(calOctaveNote)}`;
         }
 
         function deriveHardwareTempo(nowMs) {
             if (lastHwStepTime !== null) {
                 const deltaMs = nowMs - lastHwStepTime;
-                // Only trust plausible 16th-note gaps between steps. Anything
-                // shorter looks like a glitch/double-fire; anything longer means
-                // the SQ-1 paused (or we just reconnected) and shouldn't skew
-                // the running average.
                 if (deltaMs > 40 && deltaMs < 2000) {
                     hwStepIntervals.push(deltaMs);
                     if (hwStepIntervals.length > HW_TEMPO_SMOOTHING_WINDOW) hwStepIntervals.shift();
                     const avgMs = hwStepIntervals.reduce((a, b) => a + b, 0) / hwStepIntervals.length;
-                    // Each Note On the SQ-1 sends is one step; running normally
-                    // that's a 16th note, so 4 steps = 1 quarter-note beat.
                     const derivedBpm = 60000 / (avgMs * 4);
                     bpm = Math.max(20, Math.min(300, derivedBpm));
                     derivedBpmReady = true;
@@ -1714,11 +1688,6 @@
         function setHardwareOverrideUI(active) {
             hardwareIsMaster = active;
 
-            // These controls either fight the hardware (transport, manual step,
-            // patch reset) or are meaningless while it's driving (play mode,
-            // clock speed — now a live readout instead of an input), so grey
-            // them out and stop accepting input rather than let them quietly
-            // do nothing or contradict what the SQ-1 is actually doing.
             const lockIds = ['startStop-wrap', 'playModeBank', 'trigRow'];
             lockIds.forEach(id => {
                 const el = document.getElementById(id);
@@ -1762,12 +1731,8 @@
             }
 
             if (cmd === 0x90 && velocity > 0) {
-                // If a calibration capture is armed, this note IS the calibration
-                // point - grab it and stop here rather than also playing/reflecting
-                // it as a normal step (the knob is likely sitting at an extreme,
-                // not a musically intended position).
                 if (calArm) {
-                    if (calArm === 'min') calMinNote = note; else calMaxNote = note;
+                    if (calArm === 'min') calZeroNote = note; else calOctaveNote = note;
                     calArm = null;
                     updateCalReadout();
                     updateResetStatusLine();
@@ -1775,16 +1740,11 @@
                 }
 
                 const pitchVal = pitchFromMidiNote(note);
-                const cVal = (velocity / 127) * 5; // Velocity maps to CH-C (0-5V)
+                const cVal = (velocity / 127) * 5; 
                 activeExtMidiNote = note;
 
-                // Measure the real-world gap since the last step note to derive
-                // tempo — this is the only sync data the SQ-1 actually gives us
-                // over USB, since it never sends 0xF8 clock.
                 if (hardwareIsMaster) deriveHardwareTempo(performance.now());
 
-                // Hardware is master: our own transport must not also be generating
-                // steps while the SQ-1 is feeding us its sequence, or we'd double-trigger.
                 if (isPlaying) stopSequencer();
 
                 initAudio().then(() => {
@@ -1796,9 +1756,6 @@
                     activeExtMidiNote = null;
                     stopPreview(true);
 
-                    // Bug fix: previously the last-lit step LED and CH pilot stayed on
-                    // forever once the hardware released its gate. Clear them so the
-                    // panel honestly shows "no signal" between hardware notes.
                     if (externalStepActive) {
                         document.querySelectorAll('.step-indicator').forEach(el => el.classList.remove('active'));
                         document.getElementById('pilotA').classList.remove('pilot-active');
@@ -1871,7 +1828,6 @@
                 }
             }
 
-            // Zero-Click Auto-Enable logic
             if (sq1Detected && !midiEnabled) {
                 midiEnabled = true;
                 btnMidi.classList.add('active-toggle');
@@ -1881,7 +1837,6 @@
                 const pVal = parseFloat(document.getElementById('portamento').dataset.val);
                 sendMidiPortamento(pVal);
             } else if (!sq1Detected && midiEnabled && btnMidi.innerText === 'SQ-1 LINKED') {
-                // If it was auto-linked but the device disappeared
                 btnMidi.innerText = 'MIDI: ON';
             }
             refreshHardwareMasterState();
@@ -1902,7 +1857,6 @@
             btnMidi.classList.toggle('active-toggle', midiEnabled);
             
             if (midiEnabled) {
-                // Determine text based on current selection
                 const outName = midiOutput ? midiOutput.name.toUpperCase() : '';
                 const inName = midiInput ? midiInput.name.toUpperCase() : '';
                 if (outName.includes('SQ-1') || inName.includes('SQ-1')) {
@@ -1949,8 +1903,8 @@
         });
 
         btnCalReset.addEventListener('click', () => {
-            calMinNote = null;
-            calMaxNote = null;
+            calZeroNote = null;
+            calOctaveNote = null;
             calArm = null;
             updateCalReadout();
             updateResetStatusLine();
