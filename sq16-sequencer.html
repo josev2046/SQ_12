@@ -6,6 +6,7 @@
     -- Architecture: Converted from 12/24-step to 8/16-step grid matching Korg SQ-1 --
     -- Features: Local WAV Recording, Web MIDI Bidirectional, Analog Audio Sync --
     -- UI Update: Centered the DAW & Sync Patchbay vertically --
+    -- MIDI Update: Incoming SQ-1 notes now mirror onto the on-screen step/knobs (hardware = master) --
 -->
 <html lang="en">
 <head>
@@ -1536,6 +1537,41 @@
             return `sq16-recording-${stamp}.${ext}`;
         }
 
+        // The SQ-1 is always the master clock/sequence when it's talking to us: every
+        // Note On it sends represents "the hardware just advanced to its next step".
+        // We mirror that onto our own step pointer + knobs, we never generate steps
+        // of our own while the hardware is driving.
+        let externalStepActive = false;
+
+        function reflectHardwareStep(pitchVal, cVal) {
+            const is16 = activeSeqMode.startsWith('16');
+            const maxSteps = is16 ? 16 : 8;
+
+            // Advance our own step pointer in lock-step with the incoming note,
+            // so the LED / CH pilot / CRT readout track the hardware's position.
+            currentStep = (currentStep + 1) % maxSteps;
+            const uiStep = currentStep % 8;
+            const ch = (is16 && currentStep >= 8) ? 'B' : 'A';
+
+            // Knobs only travel -5..+5V (or 0..5V for CH-C) - clamp incoming CV so
+            // an out-of-range hardware note can't leave a knob pinned or invisible.
+            const clampedPitch = Math.max(-5, Math.min(5, pitchVal));
+            const clampedC = Math.max(0, Math.min(5, cVal));
+
+            tracks[ch][uiStep] = clampedPitch;
+            tracks.C[uiStep] = clampedC;
+
+            const knobPitch = document.querySelector(`.knob[data-ch="${ch}"][data-step="${uiStep}"]`);
+            const knobC = document.querySelector(`.knob[data-ch="C"][data-step="${uiStep}"]`);
+            if (knobPitch) { knobPitch.dataset.val = clampedPitch; updateKnobVisual(knobPitch, clampedPitch); }
+            if (knobC) { knobC.dataset.val = clampedC; updateKnobVisual(knobC, clampedC); }
+
+            // Reuses the same LED/pilot/CRT update path the internal sequencer uses,
+            // so the step light and readout genuinely reflect the hardware's position.
+            updateUIForStep(is16);
+            externalStepActive = true;
+        }
+
         function handleMidiMessage(event) {
             const [status, note, velocity] = event.data;
             const cmd = status & 0xF0;
@@ -1552,15 +1588,29 @@
                 const pitchVal = (note - 36) / 12; // Base C2 = 36
                 const cVal = (velocity / 127) * 5; // Velocity maps to CH-C (0-5V)
                 activeExtMidiNote = note;
-                
+
+                // Hardware is master: our own transport must not also be generating
+                // steps while the SQ-1 is feeding us its sequence, or we'd double-trigger.
+                if (isPlaying) stopSequencer();
+
                 initAudio().then(() => {
                     previewSynth(pitchVal, cVal, true, true);
-                    updateDisplay(-1, pitchVal, 'EXT');
+                    reflectHardwareStep(pitchVal, cVal);
                 });
             } else if (cmd === 0x80 || (cmd === 0x90 && velocity === 0)) {
                 if (activeExtMidiNote === note) {
                     activeExtMidiNote = null;
                     stopPreview(true);
+
+                    // Bug fix: previously the last-lit step LED and CH pilot stayed on
+                    // forever once the hardware released its gate. Clear them so the
+                    // panel honestly shows "no signal" between hardware notes.
+                    if (externalStepActive) {
+                        document.querySelectorAll('.step-indicator').forEach(el => el.classList.remove('active'));
+                        document.getElementById('pilotA').classList.remove('pilot-active');
+                        document.getElementById('pilotB').classList.remove('pilot-active');
+                        externalStepActive = false;
+                    }
                 }
             }
         }
