@@ -6,6 +6,7 @@
     -- Architecture: Grid matches Korg SQ-1 hardware --
     -- Features: Local WAV Recording, Web MIDI Bidirectional, Analog Audio Sync --
     -- Hardware Match: Unified 8-Position SEQUENCER MODE UI mirrors physical dial --
+    -- Engine Update: Hardware Unipolar (0-5V) maps to Software Bipolar (-5V to +5V) --
 -->
 <html lang="en">
 <head>
@@ -330,7 +331,7 @@
                     <div class="text-[#0f0] font-mono text-[10px] text-right leading-tight z-10 flex flex-col justify-center h-full flex-1">
                         <div id="dispStep" class="mb-0.5">STEP: --</div>
                         <div id="dispVolt" class="mb-0.5">VOLT: 0.00</div>
-                        <div id="dispNote" class="mb-1">NOTE: C2</div>
+                        <div id="dispNote" class="mb-1">NOTE: C4</div>
                         <div id="resetStatus" class="text-[9px] text-[#ffaa00] font-bold tracking-wider mt-1 opacity-90">PATCH: NONE</div>
                     </div>
                 </div>
@@ -346,7 +347,7 @@
                     <div class="text-[#0f0] font-mono text-[10px] text-right leading-tight z-10 flex flex-col justify-center h-full flex-1">
                         <div id="dispStepMobile" class="mb-0.5">STEP: --</div>
                         <div id="dispVoltMobile" class="mb-0.5">VOLT: 0.00</div>
-                        <div id="dispNoteMobile" class="mb-1">NOTE: C2</div>
+                        <div id="dispNoteMobile" class="mb-1">NOTE: C4</div>
                         <div id="resetStatusMobile" class="text-[9px] text-[#ffaa00] font-bold tracking-wider mt-1 opacity-90">PATCH: NONE</div>
                     </div>
                 </div>
@@ -403,7 +404,7 @@
 
                     <div class="panel-divider"></div>
 
-                    <!-- 2. ROUTING & MODE -->
+                    <!-- 2. ROUTING & MODE (8-POSITION HARDWARE MATCH) -->
                     <div class="flex items-center gap-5 relative">
                         <span class="absolute -top-6 left-1/2 -translate-x-1/2 text-[8px] font-bold tracking-widest text-[#82796e] whitespace-nowrap">SEQUENCER MODE</span>
                         
@@ -571,10 +572,10 @@
                         <div class="w-full flex flex-col gap-1.5 p-2 bg-[#38342e]/5 border border-[#38342e]/20 rounded">
                             <span class="text-[7px] font-bold text-[#1f1a14] text-center w-full">CV CALIBRATION</span>
                             <div class="flex gap-1 w-full">
-                                <button id="btnCalMin" class="tactile-button px-1 py-1.5 rounded text-[8px] font-bold flex-1" title="Set a knob to Center (0V), click this, then trigger">SET 0V</button>
-                                <button id="btnCalMax" class="tactile-button px-1 py-1.5 rounded text-[8px] font-bold flex-1" title="Set a knob 1 Octave up (+1V), click this, then trigger">SET +1V</button>
+                                <button id="btnCalMin" class="tactile-button px-1 py-1.5 rounded text-[8px] font-bold flex-1" title="Set physical knob to minimum, click this, then trigger">SET MIN</button>
+                                <button id="btnCalMax" class="tactile-button px-1 py-1.5 rounded text-[8px] font-bold flex-1" title="Set physical knob to maximum, click this, then trigger">SET MAX</button>
                             </div>
-                            <div id="calReadout" class="text-[7px] font-bold text-[#1f1a14] text-center w-full">0V:-- +1V:--</div>
+                            <div id="calReadout" class="text-[7px] font-bold text-[#1f1a14] text-center w-full">MIN:-- MAX:--</div>
                             <button id="btnCalReset" class="tactile-button px-2 py-1 rounded text-[8px] font-bold w-full opacity-70">RESET CAL</button>
                         </div>
 
@@ -654,8 +655,8 @@
 
         // --- CV Calibration State ---
         let calArm = null; 
-        let calZeroNote = null;
-        let calOctaveNote = null;
+        let calMinNote = null;
+        let calMaxNote = null;
 
         let bpm = 120;
         let portamentoTime = 0.01;
@@ -779,9 +780,9 @@
                 noteStr = `CTRL: C-MOD`;
             } else {
                 const semitoneOffset = Math.round(volt * 12) + transposeSemitones + octaveOffsetSemitones + Math.round(finePitchTuneSemitones);
-                const totalNote = 24 + semitoneOffset; 
+                const totalNote = 60 + semitoneOffset; // 0V Center = C4 (Note 60)
                 const noteIndex = ((totalNote % 12) + 12) % 12;
-                const octave = Math.floor(totalNote / 12);
+                const octave = Math.floor(totalNote / 12) - 1;
                 noteStr = `NOTE: ${noteNames[noteIndex]}${octave}`;
             }
 
@@ -800,8 +801,14 @@
 
         function updateKnobVisual(knobEl, val) {
             if (knobEl.hasAttribute('data-ch')) {
-                // All SQ-1 CV out is positive unipolar (0-5V)
-                knobEl.style.transform = `rotate(${-135 + (val / 5) * 270}deg)`;
+                const ch = knobEl.dataset.ch;
+                if (ch === 'C') {
+                    // Track C is unipolar 0 to 5
+                    knobEl.style.transform = `rotate(${-135 + (val / 5) * 270}deg)`;
+                } else {
+                    // Tracks A & B are bipolar -5 to +5 (10 unit sweep)
+                    knobEl.style.transform = `rotate(${val * 27}deg)`; 
+                }
             } else {
                 knobEl.style.transform = `rotate(${-135 + (val / 100) * 270}deg)`;
             }
@@ -880,7 +887,7 @@
         function getMidiPitchInfo(semitoneOffset) {
             const nearestSemitone = Math.round(semitoneOffset);
             const cents = Math.round((semitoneOffset - nearestSemitone) * 100);
-            let midiNote = 36 + nearestSemitone; // C2 = 36
+            let midiNote = 60 + nearestSemitone; // C4 = 60
             midiNote = Math.max(0, Math.min(127, midiNote));
             return { midiNote, cents };
         }
@@ -1035,8 +1042,13 @@
 
                 if (isSeqKnob) {
                     const ch = activeKnob.dataset.ch;
-                    // Restrict all manual UI drags to the hardware-accurate 0-5 range
-                    let newVal = Math.max(0, Math.min(5, startVal + (startY - e.clientY) * 0.025));
+                    let newVal;
+                    if (ch === 'C') {
+                        newVal = Math.max(0, Math.min(5, startVal + (startY - e.clientY) * 0.025));
+                    } else {
+                        // Restrict UI drags on A/B to the bipolar -5 to +5 range
+                        newVal = Math.max(-5, Math.min(5, startVal + (startY - e.clientY) * 0.05));
+                    }
                     
                     tracks[ch][activeKnob.dataset.step] = newVal;
                     
@@ -1232,8 +1244,11 @@
                 document.getElementById('ledRow').innerHTML += `<div class="w-[56px] flex justify-center step-indicator" data-step="${i}"><div class="led"></div></div>`;
                 
                 ['A', 'B', 'C'].forEach(ch => {
-                    const defaultVal = (ch === 'C') ? 2.5 : 0; 
-                    const labelsHTML = `<span class="tick-label label-left">0</span><span class="tick-label label-right">+5</span>`;
+                    const isBipolar = (ch === 'A' || ch === 'B');
+                    const defaultVal = isBipolar ? 0 : 2.5; 
+                    const labelsHTML = isBipolar ? 
+                        `<span class="tick-label label-left">-5</span><span class="tick-label label-top">0</span><span class="tick-label label-right">+5</span>` : 
+                        `<span class="tick-label label-left">0</span><span class="tick-label label-right">+5</span>`;
 
                     document.getElementById(`row${ch}`).innerHTML += `
                         <div class="knob-wrapper">
@@ -1312,9 +1327,9 @@
                     let pVal = tracks.A[0] * voltageRangeMultiplier;
                     
                     const totalSemitone = Math.round(pVal * 12) + transposeSemitones + octaveOffsetSemitones + Math.round(finePitchTuneSemitones);
-                    const totalNote = 24 + totalSemitone; 
+                    const totalNote = 60 + totalSemitone; 
                     const noteIndex = ((totalNote % 12) + 12) % 12;
-                    const octave = Math.floor(totalNote / 12);
+                    const octave = Math.floor(totalNote / 12) - 1;
                     const noteStr = `NOTE: ${noteNames[noteIndex]}${octave}`;
 
                     document.getElementById('dispStep').innerText = 'STEP: KB';
@@ -1636,7 +1651,7 @@
                 ch = isParallel ? 'B' : 'A'; 
             }
 
-            const clampedPitch = Math.max(0, Math.min(5, pitchVal));
+            const clampedPitch = Math.max(-5, Math.min(5, pitchVal));
             const clampedC = Math.max(0, Math.min(5, cVal));
 
             tracks[ch][uiStep] = clampedPitch;
@@ -1671,7 +1686,7 @@
         function updateResetStatusLine() {
             let txt;
             if (calArm) {
-                txt = calArm === 'min' ? 'CAL: TRIGGER 0V STEP' : 'CAL: TRIGGER +1V STEP';
+                txt = calArm === 'min' ? 'CAL: TRIGGER MIN STEP' : 'CAL: TRIGGER MAX STEP';
             } else if (hardwareIsMaster) {
                 txt = derivedBpmReady ? `EXT BPM: ${Math.round(bpm)}` : 'EXT BPM: --';
             } else {
@@ -1684,11 +1699,13 @@
         }
 
         function pitchFromMidiNote(note) {
-            if (calZeroNote !== null && calOctaveNote !== null && calOctaveNote !== calZeroNote) {
-                const notesPerVolt = calOctaveNote - calZeroNote;
-                return (note - calZeroNote) / notesPerVolt;
-            }
-            return (note - 36) / 12; 
+            let minNote = calMinNote !== null ? calMinNote : 36; // C2
+            let maxNote = calMaxNote !== null ? calMaxNote : 96; // C7
+            if (maxNote === minNote) maxNote = minNote + 60; // Prevent division by zero
+            
+            // Map the physical unipolar range (minNote to maxNote) to the UI's bipolar range (-5V to +5V)
+            const t = (note - minNote) / (maxNote - minNote);
+            return -5 + (t * 10); 
         }
 
         function noteLabel(n) {
@@ -1700,7 +1717,7 @@
 
         function updateCalReadout() {
             const el = document.getElementById('calReadout');
-            if (el) el.innerText = `0V:${noteLabel(calZeroNote)} +1V:${noteLabel(calOctaveNote)}`;
+            if (el) el.innerText = `MIN:${noteLabel(calMinNote)} MAX:${noteLabel(calMaxNote)}`;
         }
 
         function deriveHardwareTempo(nowMs) {
@@ -1769,7 +1786,7 @@
                 const now = performance.now();
                 
                 if (calArm) {
-                    if (calArm === 'min') calZeroNote = note; else calOctaveNote = note;
+                    if (calArm === 'min') calMinNote = note; else calMaxNote = note;
                     calArm = null;
                     updateCalReadout();
                     updateResetStatusLine();
@@ -1948,8 +1965,8 @@
         });
 
         btnCalReset.addEventListener('click', () => {
-            calZeroNote = null;
-            calOctaveNote = null;
+            calMinNote = null;
+            calMaxNote = null;
             calArm = null;
             updateCalReadout();
             updateResetStatusLine();
@@ -2007,8 +2024,8 @@
             setOctave(1); setWaveform(0); finePitchTuneSemitones = 0;
             attackTime = 0.01; decayTime = 0.15; sustainLevel = 0.2; releaseTime = 0.2;
             
-            const dafA = [2.00, 1.00, 3.50, 1.00, 2.50, 1.00, 1.00, 2.50];
-            const dafB = [1.00, 2.50, 1.00, 2.50, 2.00, 1.00, 2.50, 1.00];
+            const dafA = [-0.58, -1.00, 0.25, -1.00, 0.00, -1.00, -1.00, 0.00];
+            const dafB = [-1.00, 0.00, -1.00, 0.00, -0.17, -1.00, 0.00, -1.00];
 
             for(let i=0; i<8; i++) {
                 tracks.A[i] = dafA[i]; tracks.B[i] = dafB[i]; tracks.C[i] = 2.5;
@@ -2048,8 +2065,8 @@
             setOctave(1); setWaveform(0); finePitchTuneSemitones = 0;
             attackTime = 0.005; decayTime = 0.12; sustainLevel = 0.1; releaseTime = 0.08;
             
-            const acidA = [1.00, 2.50, 3.50, 1.00, 4.00, 2.50, 2.00, 1.00];
-            const slideB = [0.00, 0.00, 5.00, 0.00, 5.00, 0.00, 0.00, 0.00];
+            const acidA = [-1.00, 0.00, 0.25, -1.00, 0.58, 0.00, -0.17, -1.00];
+            const slideB = [-5.00, -5.00, 5.00, -5.00, 5.00, -5.00, -5.00, -5.00];
             const acidC = [4.00, 1.00, 2.50, 4.50, 0.50, 2.50, 3.50, 2.00];
 
             for(let i=0; i<8; i++) {
