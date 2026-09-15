@@ -1203,9 +1203,9 @@
             
             synthVca.gain.linearRampToValueAtTime(peakVolume, time + attackTime);
             synthVca.gain.linearRampToValueAtTime(peakVolume * sustainLevel, time + attackTime + decayTime);
-            const noteEndTime = time + stepGateTime;
-            synthVca.gain.setValueAtTime(peakVolume * sustainLevel, noteEndTime);
-            synthVca.gain.exponentialRampToValueAtTime(0.001, noteEndTime + releaseTime);
+            const noteEndTime2 = time + stepGateTime;
+            synthVca.gain.setValueAtTime(peakVolume * sustainLevel, noteEndTime2);
+            synthVca.gain.exponentialRampToValueAtTime(0.001, noteEndTime2 + releaseTime);
         }
 
         async function handlePatchClick(e) {
@@ -1369,8 +1369,15 @@
             startBtn.classList.remove('is-active');
             document.getElementById('rockerLed').classList.replace('bg-red-200', 'bg-red-400');
             document.getElementById('rockerLed').classList.replace('opacity-100', 'opacity-60');
+
+            // FIX #4: clear hardware-clock detection state whenever the sequencer stops,
+            // so a stale tempo average can't linger if the hardware link drops uncleanly.
+            lastHwStepTime = 0;
+            hwStepIntervals = [];
+            derivedBpmReady = false;
             
             updateDisplay(-1, 0);
+            updateResetStatusLine();
         }
 
         function updateUIForStep(is16) {
@@ -1400,10 +1407,15 @@
             const maxSteps = is16Mode() ? 16 : 8;
 
             if (overrideDirection === -1) {
+                // FIX #2: keep bounceDirection in sync with manual stepping so that
+                // resuming autoplay in P.TRN mode continues the correct way instead
+                // of taking one wrong step before the bounce logic corrects itself.
+                bounceDirection = -1;
                 currentStep--;
                 if (currentStep < 0) currentStep = maxSteps - 1;
                 return;
             } else if (overrideDirection === 1) {
+                bounceDirection = 1;
                 currentStep++;
                 if (currentStep >= maxSteps) currentStep = 0;
                 return;
@@ -1522,53 +1534,68 @@
             recStatus.innerText = 'Unsupported browser';
         } else {
             btnRecord.addEventListener('click', async () => {
-                await initAudio();
+                try {
+                    await initAudio();
 
-                if (!isRecording) {
-                    recordedChunks = [];
-                    let options;
-                    if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) options = { mimeType: 'audio/webm;codecs=opus' };
-                    else if (MediaRecorder.isTypeSupported('audio/webm')) options = { mimeType: 'audio/webm' };
-                    mediaRecorder = new MediaRecorder(recordDestination.stream, options);
+                    // FIX #5: guard against recordDestination not existing yet
+                    // (e.g. if AudioContext creation failed) so we fail with a
+                    // clear message instead of an unhandled TypeError.
+                    if (!recordDestination) {
+                        recStatus.innerText = 'Audio not ready';
+                        return;
+                    }
 
-                    mediaRecorder.ondataavailable = (e) => {
-                        if (e.data && e.data.size > 0) recordedChunks.push(e.data);
-                    };
+                    if (!isRecording) {
+                        recordedChunks = [];
+                        let options;
+                        if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) options = { mimeType: 'audio/webm;codecs=opus' };
+                        else if (MediaRecorder.isTypeSupported('audio/webm')) options = { mimeType: 'audio/webm' };
+                        mediaRecorder = new MediaRecorder(recordDestination.stream, options);
 
-                    mediaRecorder.onstop = async () => {
-                        recStatus.innerText = 'Encoding...';
-                        const rawBlob = new Blob(recordedChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
-                        try {
-                            const arrayBuffer = await rawBlob.arrayBuffer();
-                            const decoded = await audioCtx.decodeAudioData(arrayBuffer);
-                            const wavBlob = audioBufferToWav(decoded);
-                            btnDownload.href = URL.createObjectURL(wavBlob);
-                            btnDownload.download = recordingFilename('wav');
-                        } catch (err) {
-                            btnDownload.href = URL.createObjectURL(rawBlob);
-                            btnDownload.download = recordingFilename('webm');
-                        }
-                        btnDownload.classList.remove('opacity-40', 'pointer-events-none');
-                        recStatus.innerText = '00:00';
-                    };
+                        mediaRecorder.ondataavailable = (e) => {
+                            if (e.data && e.data.size > 0) recordedChunks.push(e.data);
+                        };
 
-                    mediaRecorder.start();
-                    isRecording = true;
-                    recordStartTime = Date.now();
-                    btnRecord.classList.add('active-toggle');
-                    btnRecord.innerText = '■ STOP';
-                    btnDownload.classList.add('opacity-40', 'pointer-events-none');
+                        mediaRecorder.onstop = async () => {
+                            recStatus.innerText = 'Encoding...';
+                            const rawBlob = new Blob(recordedChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
+                            try {
+                                const arrayBuffer = await rawBlob.arrayBuffer();
+                                const decoded = await audioCtx.decodeAudioData(arrayBuffer);
+                                const wavBlob = audioBufferToWav(decoded);
+                                btnDownload.href = URL.createObjectURL(wavBlob);
+                                btnDownload.download = recordingFilename('wav');
+                            } catch (err) {
+                                btnDownload.href = URL.createObjectURL(rawBlob);
+                                btnDownload.download = recordingFilename('webm');
+                            }
+                            btnDownload.classList.remove('opacity-40', 'pointer-events-none');
+                            recStatus.innerText = '00:00';
+                        };
 
-                    recordTimerInterval = setInterval(() => {
-                        const elapsed = Math.floor((Date.now() - recordStartTime) / 1000);
-                        const mm = String(Math.floor(elapsed / 60)).padStart(2, '0');
-                        const ss = String(elapsed % 60).padStart(2, '0');
-                        recStatus.innerText = `${mm}:${ss}`;
-                    }, 500);
-                } else {
-                    mediaRecorder.stop();
+                        mediaRecorder.start();
+                        isRecording = true;
+                        recordStartTime = Date.now();
+                        btnRecord.classList.add('active-toggle');
+                        btnRecord.innerText = '■ STOP';
+                        btnDownload.classList.add('opacity-40', 'pointer-events-none');
+
+                        recordTimerInterval = setInterval(() => {
+                            const elapsed = Math.floor((Date.now() - recordStartTime) / 1000);
+                            const mm = String(Math.floor(elapsed / 60)).padStart(2, '0');
+                            const ss = String(elapsed % 60).padStart(2, '0');
+                            recStatus.innerText = `${mm}:${ss}`;
+                        }, 500);
+                    } else {
+                        mediaRecorder.stop();
+                        isRecording = false;
+                        clearInterval(recordTimerInterval);
+                        btnRecord.classList.remove('active-toggle');
+                        btnRecord.innerText = '● REC';
+                    }
+                } catch (err) {
+                    recStatus.innerText = 'Recording error';
                     isRecording = false;
-                    clearInterval(recordTimerInterval);
                     btnRecord.classList.remove('active-toggle');
                     btnRecord.innerText = '● REC';
                 }
@@ -1654,14 +1681,24 @@
             const clampedPitch = Math.max(-5, Math.min(5, pitchVal));
             const clampedC = Math.max(0, Math.min(5, cVal));
 
-            tracks[ch][uiStep] = clampedPitch;
+            // FIX #1: pitchVal arrives already mapped to the full -5..+5 range
+            // (see pitchFromMidiNote). tracks[] is played back multiplied by
+            // voltageRangeMultiplier, so we need to pre-divide here or a
+            // calibrated hardware note gets silently attenuated whenever the
+            // RANGE switch is set to ±1V. Guard against divide-by-zero just
+            // in case voltageRangeMultiplier is ever 0.
+            const storedPitch = voltageRangeMultiplier !== 0
+                ? clampedPitch / voltageRangeMultiplier
+                : clampedPitch;
+
+            tracks[ch][uiStep] = storedPitch;
             
             if (!isParallel) tracks.C[uiStep] = clampedC;
 
             const knobPitch = document.querySelector(`.knob[data-ch="${ch}"][data-step="${uiStep}"]`);
             if (knobPitch) { 
-                knobPitch.dataset.val = clampedPitch; 
-                updateKnobVisual(knobPitch, clampedPitch); 
+                knobPitch.dataset.val = storedPitch; 
+                updateKnobVisual(knobPitch, storedPitch); 
                 flashHwSync(knobPitch); 
             }
 
