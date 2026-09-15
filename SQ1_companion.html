@@ -283,6 +283,18 @@
         .grid-scroll::-webkit-scrollbar { height: 8px; }
         .grid-scroll::-webkit-scrollbar-track { background: #cebba8; border-radius: 4px; }
         .grid-scroll::-webkit-scrollbar-thumb { background: #38342e; border-radius: 4px; }
+
+        /* A step knob that hasn't yet received a real hardware note is
+           shown dim + dashed so it reads visually as "unconfirmed", not
+           as a live value. Cleared the moment reflectHardwareStep(),
+           a manual drag, or a demo preset gives it a real value. */
+        .knob.unsynced {
+            opacity: 0.4;
+            border-style: dashed;
+            border-color: #6a6459;
+            box-shadow: none;
+        }
+        .knob.unsynced::after { opacity: 0.5; }
     </style>
 </head>
 <body class="min-h-screen flex justify-center items-start">
@@ -568,13 +580,10 @@
                             </div>
                         </div>
 
-                        <!-- CV CALIBRATION -->
+                        <!-- CV AUTO-CALIBRATION -->
                         <div class="w-full flex flex-col gap-1.5 p-2 bg-[#38342e]/5 border border-[#38342e]/20 rounded">
-                            <span class="text-[7px] font-bold text-[#1f1a14] text-center w-full">CV CALIBRATION</span>
-                            <div class="flex gap-1 w-full">
-                                <button id="btnCalMin" class="tactile-button px-1 py-1.5 rounded text-[8px] font-bold flex-1" title="Set physical knob to minimum, click this, then trigger">SET MIN</button>
-                                <button id="btnCalMax" class="tactile-button px-1 py-1.5 rounded text-[8px] font-bold flex-1" title="Set physical knob to maximum, click this, then trigger">SET MAX</button>
-                            </div>
+                            <span class="text-[7px] font-bold text-[#1f1a14] text-center w-full">CV AUTO-CAL</span>
+                            <span class="text-[6px] font-bold text-[#82796e] text-center w-full leading-tight normal-case">learns range as you play — no setup needed</span>
                             <div id="calReadout" class="text-[7px] font-bold text-[#1f1a14] text-center w-full">MIN:-- MAX:--</div>
                             <button id="btnCalReset" class="tactile-button px-2 py-1 rounded text-[8px] font-bold w-full opacity-70">RESET CAL</button>
                         </div>
@@ -653,8 +662,10 @@
         let derivedBpmReady = false;
         let hardwareIsMaster = false; 
 
-        // --- CV Calibration State ---
-        let calArm = null; 
+        // --- CV Auto-Calibration State ---
+        // No "arm" step needed: calMinNote/calMaxNote passively widen to
+        // whatever the widest notes seen so far are, as real hardware
+        // notes stream in during normal play. See pitchFromMidiNote().
         let calMinNote = null;
         let calMaxNote = null;
 
@@ -1020,7 +1031,11 @@
                     const ch = activeKnob.dataset.ch;
                     const uiStep = parseInt(activeKnob.dataset.step);
                     const stepIdx = uiStep + (ch === 'B' && is16Mode() ? 8 : 0);
-                    
+
+                    // A manual drag is a deliberate, explicit value — no
+                    // longer just a stale placeholder default.
+                    activeKnob.classList.remove('unsynced');
+
                     let displayVal = parseFloat(activeKnob.dataset.val);
                     if (ch === 'A' || ch === 'B') displayVal *= voltageRangeMultiplier;
                     
@@ -1255,7 +1270,7 @@
                             <div class="tick-container">
                                 <div class="tick-ring"></div>
                                 ${labelsHTML}
-                                <div class="knob" data-ch="${ch}" data-step="${i}" data-val="${defaultVal}"></div>
+                                <div class="knob unsynced" data-ch="${ch}" data-step="${i}" data-val="${defaultVal}"></div>
                             </div>
                         </div>`;
                 });
@@ -1700,6 +1715,7 @@
                 knobPitch.dataset.val = storedPitch; 
                 updateKnobVisual(knobPitch, storedPitch); 
                 flashHwSync(knobPitch); 
+                knobPitch.classList.remove('unsynced'); // real hardware data has now confirmed this knob
             }
 
             if (!isParallel) {
@@ -1708,6 +1724,7 @@
                     knobC.dataset.val = clampedC; 
                     updateKnobVisual(knobC, clampedC); 
                     flashHwSync(knobC); 
+                    knobC.classList.remove('unsynced');
                 }
                 updateUIForStep(is16Mode());
             }
@@ -1722,9 +1739,7 @@
 
         function updateResetStatusLine() {
             let txt;
-            if (calArm) {
-                txt = calArm === 'min' ? 'CAL: TRIGGER MIN STEP' : 'CAL: TRIGGER MAX STEP';
-            } else if (hardwareIsMaster) {
+            if (hardwareIsMaster) {
                 txt = derivedBpmReady ? `EXT BPM: ${Math.round(bpm)}` : 'EXT BPM: --';
             } else {
                 txt = currentPatchLabel;
@@ -1736,12 +1751,18 @@
         }
 
         function pitchFromMidiNote(note) {
-            let minNote = calMinNote !== null ? calMinNote : 36; // C2
-            let maxNote = calMaxNote !== null ? calMaxNote : 96; // C7
-            if (maxNote === minNote) maxNote = minNote + 60; // Prevent division by zero
-            
-            // Map the physical unipolar range (minNote to maxNote) to the UI's bipolar range (-5V to +5V)
-            const t = (note - minNote) / (maxNote - minNote);
+            // Passive auto-calibration: every real hardware note that comes
+            // in widens the known range. No arming, no "trigger min/max"
+            // ritual — just play normally and the mapping tightens itself
+            // up as you naturally sweep the knobs across their travel.
+            if (calMinNote === null || note < calMinNote) calMinNote = note;
+            if (calMaxNote === null || note > calMaxNote) calMaxNote = note;
+            updateCalReadout();
+
+            if (calMinNote === calMaxNote) return 0; // only one distinct note seen so far — sit at center until range widens
+
+            // Map the physical unipolar range (calMinNote to calMaxNote) to the UI's bipolar range (-5V to +5V)
+            const t = (note - calMinNote) / (calMaxNote - calMinNote);
             return -5 + (t * 10); 
         }
 
@@ -1821,14 +1842,6 @@
 
             if (cmd === 0x90 && velocity > 0) {
                 const now = performance.now();
-                
-                if (calArm) {
-                    if (calArm === 'min') calMinNote = note; else calMaxNote = note;
-                    calArm = null;
-                    updateCalReadout();
-                    updateResetStatusLine();
-                    return;
-                }
 
                 const pitchVal = pitchFromMidiNote(note);
                 const cVal = (velocity / 127) * 5; 
@@ -1985,26 +1998,15 @@
             refreshHardwareMasterState();
         });
 
-        const btnCalMin = document.getElementById('btnCalMin');
-        const btnCalMax = document.getElementById('btnCalMax');
         const btnCalReset = document.getElementById('btnCalReset');
 
-        btnCalMin.addEventListener('click', async () => {
-            await initAudio();
-            calArm = 'min';
-            updateResetStatusLine();
-        });
-
-        btnCalMax.addEventListener('click', async () => {
-            await initAudio();
-            calArm = 'max';
-            updateResetStatusLine();
-        });
-
+        // Resets the learned MIN/MAX range only — it does NOT mark any
+        // step knob as unsynced again, since the knob values themselves
+        // are still whatever hardware last confirmed. The range just
+        // starts re-widening from scratch on the next notes received.
         btnCalReset.addEventListener('click', () => {
             calMinNote = null;
             calMaxNote = null;
-            calArm = null;
             updateCalReadout();
             updateResetStatusLine();
         });
@@ -2071,6 +2073,7 @@
                 let knobC = document.querySelector(`.knob[data-ch="C"][data-step="${i}"]`);
                 knobA.dataset.val = dafA[i]; knobB.dataset.val = dafB[i]; knobC.dataset.val = 2.5;
                 updateKnobVisual(knobA, dafA[i]); updateKnobVisual(knobB, dafB[i]); updateKnobVisual(knobC, 2.5);
+                knobA.classList.remove('unsynced'); knobB.classList.remove('unsynced'); knobC.classList.remove('unsynced');
             }
             
             setGlobalKnob('clockSpeed', 35); bpm = 40 + (35 / 100) * 200;
@@ -2113,6 +2116,7 @@
                 let knobC = document.querySelector(`.knob[data-ch="C"][data-step="${i}"]`);
                 knobA.dataset.val = acidA[i]; knobB.dataset.val = slideB[i]; knobC.dataset.val = acidC[i];
                 updateKnobVisual(knobA, acidA[i]); updateKnobVisual(knobB, slideB[i]); updateKnobVisual(knobC, acidC[i]);
+                knobA.classList.remove('unsynced'); knobB.classList.remove('unsynced'); knobC.classList.remove('unsynced');
             }
             
             setGlobalKnob('clockSpeed', 50); bpm = 40 + (50 / 100) * 200; 
