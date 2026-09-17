@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<!--
+    SQ-12 Analog Sequencer (Locked & Scrollable Master Console)
+    Created & Developed by Jose Velazquez MA
+    Voltage & Wave (https://voltageandwave.co.uk/)
+    Copyright (c) 2026 Jose Velazquez MA / Voltage & Wave. All rights reserved.
+-->
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>SQ-12 Analog Sequencer</title>
+
+    <!--
+        Defense-in-depth note: this app is 100% client-side (no backend, no
+        keys, no user data), so the CSP below is mainly to limit blast radius
+        if the Tailwind CDN were ever compromised, plus SRI on the script tag
+        itself. For a production deploy, consider swapping the Tailwind
+        play-CDN script for a locally built stylesheet instead.
+    -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.tailwindcss.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self';">
+
+    <!--
+        No SRI hash on this script: cdn.tailwindcss.com's play-CDN build is
+        served dynamically and its content isn't stable, so a pinned hash
+        would break the page the next time Tailwind updates it. The CSP
+        script-src restriction above is the practical mitigation here — see
+        README.md for the self-hosted-Tailwind alternative if you want SRI.
+    -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body class="min-h-screen flex justify-center items-start">
+    <div class="synth-enclosure w-full max-w-6xl">
+        <div class="wooden-ear wooden-ear-left"></div>
+
+        <div class="chassis w-full">
+            <div class="rack-bolt bolt-tl"></div>
+            <div class="rack-bolt bolt-tr"></div>
+            <div class="rack-bolt bolt-bl"></div>
+            <div class="rack-bolt bolt-br"></div>
+
+            <!-- HEADER: Logo & Restored Unified Display Module -->
+            <div class="flex items-center justify-between w-full mb-6 pb-4 border-b-2 border-[#38342e]/30">
+
+                <!-- CONCEPT 3 MODULAR PATCH-BAY LOGO (NO HYPHEN) -->
+                <div class="flex flex-col gap-1.5">
+                    <div class="flex items-center gap-1.5 select-none">
+                        <!-- Module Panel S -->
+                        <div class="logo-panel-accent w-10 h-11 rounded flex flex-col items-center justify-center relative">
+                            <span class="logo-char font-mono font-black text-xl tracking-tighter leading-none">S</span>
+                            <span class="text-[6px] font-bold text-[#ff9d93]/60 tracking-widest mt-0.5">MOD</span>
+                        </div>
+
+                        <!-- Module Panel Q (with Patch Jack LED accent) -->
+                        <div class="logo-panel-accent w-10 h-11 rounded flex flex-col items-center justify-between py-1 relative">
+                            <span class="logo-char font-mono font-black text-xl tracking-tighter leading-none mt-0.5">Q</span>
+                            <div class="patch-jack-dot mb-0.5" title="Signal Peak LED"></div>
+                        </div>
+
+                        <!-- Module Panel 1 -->
+                        <div class="logo-panel w-10 h-11 rounded flex flex-col items-center justify-center relative ml-1">
+                            <span class="logo-char font-mono font-black text-xl tracking-tighter leading-none">1</span>
+                            <span class="text-[6px] font-bold text-[#82796e] tracking-widest mt-0.5">CH</span>
+                        </div>
+
+                        <!-- Module Panel 2 -->
+                        <div class="logo-panel w-10 h-11 rounded flex flex-col items-center justify-center relative">
+                            <span class="logo-char font-mono font-black text-xl tracking-tighter leading-none">2</span>
+                            <span class="text-[6px] font-bold text-[#82796e] tracking-widest mt-0.5">OUT</span>
+                        </div>
+                    </div>
+
+                    <!-- Secondary Subtitle Alignment -->
+                    <div class="flex items-center justify-between w-full text-[8px] font-mono font-bold tracking-widest text-[#38342e] border-t border-[#38342e]/30 pt-1">
+                        <span>ANALOG SEQUENCER</span>
+                        <span class="text-[#c83a2a]">&bull;</span>
+                        <span>VCA / GATE</span>
+                    </div>
+                </div>
+
+                <div class="crt-screen w-[320px] h-[72px] flex items-center justify-between px-4 py-2 flex-shrink-0 ml-4 hidden md:flex">
+                    <div class="flex-shrink-0 flex items-center justify-center">
+                        <canvas id="scopeCanvas" width="110" height="50" class="border border-[#111] z-10"></canvas>
+                    </div>
+                    <div class="border-l border-[#0f0]/30 h-[50px] mx-4 z-10"></div>
+                    <div class="text-[#0f0] font-mono text-[10px] text-right leading-tight z-10 flex flex-col justify-center h-full flex-1">
+                        <div id="dispStep" class="mb-0.5">STEP: --</div>
+                        <div id="dispVolt" class="mb-0.5">VOLT: 0.00</div>
+                        <div id="dispNote" class="mb-1">NOTE: C2</div>
+                        <div id="resetStatus" class="text-[9px] text-[#ffaa00] font-bold tracking-wider mt-1 opacity-90">PATCH: NONE</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Mobile CRT Display (Shows only on small screens below header) -->
+            <div class="w-full mb-6 flex md:hidden justify-center">
+                <div class="crt-screen w-full max-w-[320px] h-[72px] flex items-center justify-between px-4 py-2">
+                    <div class="flex-shrink-0 flex items-center justify-center">
+                        <canvas id="scopeCanvasMobile" width="110" height="50" class="border border-[#111] z-10"></canvas>
+                    </div>
+                    <div class="border-l border-[#0f0]/30 h-[50px] mx-4 z-10"></div>
+                    <div class="text-[#0f0] font-mono text-[10px] text-right leading-tight z-10 flex flex-col justify-center h-full flex-1">
+                        <div id="dispStepMobile" class="mb-0.5">STEP: --</div>
+                        <div id="dispVoltMobile" class="mb-0.5">VOLT: 0.00</div>
+                        <div id="dispNoteMobile" class="mb-1">NOTE: C2</div>
+                        <div id="resetStatusMobile" class="text-[9px] text-[#ffaa00] font-bold tracking-wider mt-1 opacity-90">PATCH: NONE</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- UNIFIED MASTER CONTROL ROW: Scrollable horizontally on mobile, static on desktop -->
+            <div class="panel-outline w-full overflow-x-auto grid-scroll mb-8">
+                <div class="flex flex-nowrap items-center justify-between min-w-max gap-6 px-4 pt-8 pb-5 mx-auto h-full">
+
+                    <!-- 1. TRANSPORT & CLOCK -->
+                    <div class="flex items-center gap-4 relative">
+                        <span class="absolute -top-6 left-1/2 -translate-x-1/2 text-[8px] font-bold tracking-widest text-[#82796e] whitespace-nowrap">TRANSPORT / CLOCK</span>
+
+                        <div class="flex flex-col gap-2 justify-center w-[110px]">
+                            <button id="startStop" class="rocker-button text-white px-3 py-1.5 font-black rounded-sm flex items-center justify-center gap-2 w-full">
+                                <span class="w-1.5 h-1.5 rounded-full bg-red-400 opacity-60" id="rockerLed"></span>
+                                <svg width="16" height="12" viewBox="0 0 20 14" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                                    <polygon points="1,1 9,7 1,13" />
+                                    <rect x="12" y="2" width="7" height="10" />
+                                </svg>
+                            </button>
+                            <div class="flex gap-1.5 w-full">
+                                <button id="stepRev" class="tactile-button py-1 flex items-center justify-center rounded-sm flex-1">
+                                    <svg width="12" height="12" viewBox="0 0 14 14" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                                        <rect x="1" y="2" width="2" height="10" />
+                                        <polygon points="13,1 4,7 13,13" />
+                                    </svg>
+                                </button>
+                                <button id="stepAdv" class="tactile-button py-1 flex items-center justify-center rounded-sm flex-1">
+                                    <svg width="12" height="12" viewBox="0 0 14 14" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                                        <polygon points="1,1 10,7 1,13" />
+                                        <rect x="11" y="2" width="2" height="10" />
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="flex gap-3">
+                            <div class="knob-wrapper">
+                                <div class="tick-container">
+                                    <div class="tick-ring"></div>
+                                    <div class="knob global-knob" id="clockSpeed" data-val="50"></div>
+                                </div>
+                                <span class="text-[9px] font-bold text-[#1f1a14]">SPEED</span>
+                            </div>
+                            <div class="knob-wrapper">
+                                <div class="tick-container">
+                                    <div class="tick-ring"></div>
+                                    <div class="knob global-knob" id="portamento" data-val="0"></div>
+                                </div>
+                                <span class="text-[9px] font-bold text-[#1f1a14]">PORTA</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="panel-divider"></div>
+
+                    <!-- 2. ROUTING & MODE -->
+                    <div class="flex items-center gap-5 relative">
+                        <span class="absolute -top-6 left-1/2 -translate-x-1/2 text-[8px] font-bold tracking-widest text-[#82796e] whitespace-nowrap">ROUTING & MODE</span>
+
+                        <div class="flex flex-col items-center gap-1">
+                            <span class="text-[7px] font-bold text-[#1f1a14]">12</span>
+                            <div class="volt-rocker volt-toggle-top" id="lengthRockerBtn">
+                                <div class="volt-rocker-cap"></div>
+                            </div>
+                            <span class="text-[7px] font-bold text-[#1f1a14]">24</span>
+                            <span class="text-[8px] font-bold text-[#1f1a14] mt-0.5">STEPS</span>
+                        </div>
+
+                        <div class="flex flex-col items-center justify-center h-full">
+                            <div class="flex flex-col gap-1" id="playModeBank">
+                                <button class="mode-btn" data-play="step">STEP</button>
+                                <button class="mode-btn mode-active" data-play="cont">CONT</button>
+                                <button class="mode-btn" data-play="one">ONCE</button>
+                            </div>
+                            <span class="text-[8px] font-bold text-[#1f1a14] mt-1.5">MODE</span>
+                        </div>
+
+                        <div class="flex flex-col items-center gap-1">
+                            <span class="text-[7px] font-bold text-[#1f1a14]">&plusmn;5V</span>
+                            <div class="volt-rocker volt-toggle-top" id="voltRockerBtn">
+                                <div class="volt-rocker-cap"></div>
+                            </div>
+                            <span class="text-[7px] font-bold text-[#1f1a14]">&plusmn;1V</span>
+                            <span class="text-[8px] font-bold text-[#1f1a14] mt-0.5">RANGE</span>
+                        </div>
+
+                        <div class="flex flex-col items-center justify-center h-full">
+                            <div class="flex flex-col gap-1" id="chCDestBank">
+                                <button class="dest-btn dest-active" data-dest="filter">VCF</button>
+                                <button class="dest-btn" data-dest="volume">VCA</button>
+                                <button class="dest-btn" data-dest="clock">CLK</button>
+                            </div>
+                            <span class="text-[8px] font-bold text-[#1f1a14] mt-1.5">DEST</span>
+                        </div>
+                    </div>
+
+                    <div class="panel-divider"></div>
+
+                    <!-- 3. OSCILLATOR MODULE -->
+                    <div class="flex items-center gap-4 relative">
+                        <span class="absolute -top-6 left-1/2 -translate-x-1/2 text-[8px] font-bold tracking-widest text-[#82796e] whitespace-nowrap">OSCILLATOR (VCO)</span>
+
+                        <div class="flex flex-col items-center justify-center h-full">
+                            <div class="grid grid-cols-2 gap-1 mb-1.5" id="waveBtnBank">
+                                <button class="wave-btn wave-active" data-wave="0" title="Sawtooth">
+                                    <svg width="16" height="12" viewBox="0 0 24 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round">
+                                        <path d="M4 14 L12 2 V14 L20 2 V14" />
+                                    </svg>
+                                </button>
+                                <button class="wave-btn" data-wave="1" title="Square">
+                                    <svg width="16" height="12" viewBox="0 0 24 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round">
+                                        <path d="M3 14 V4 h8 v10 h8 v-10" />
+                                    </svg>
+                                </button>
+                                <button class="wave-btn" data-wave="2" title="Triangle">
+                                    <svg width="16" height="12" viewBox="0 0 24 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round">
+                                        <path d="M3 14 L8 2 L16 14 L21 2" />
+                                    </svg>
+                                </button>
+                                <button class="wave-btn" data-wave="3" title="Sine">
+                                    <svg width="16" height="12" viewBox="0 0 24 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+                                        <path d="M2 8 C 6 -4, 10 -4, 12 8 C 14 20, 18 20, 22 8" />
+                                    </svg>
+                                </button>
+                            </div>
+                            <span class="text-[8px] font-bold text-[#1f1a14]">WAVE</span>
+                        </div>
+
+                        <div class="flex flex-col items-center justify-center h-full">
+                            <div class="grid grid-cols-2 gap-1 mb-1.5" id="octaveBtnBank">
+                                <button class="oct-btn" data-oct="0">32'</button>
+                                <button class="oct-btn oct-active" data-oct="1">16'</button>
+                                <button class="oct-btn" data-oct="2">8'</button>
+                                <button class="oct-btn" data-oct="3">4'</button>
+                            </div>
+                            <span class="text-[8px] font-bold text-[#1f1a14]">SCALE</span>
+                        </div>
+
+                        <div class="knob-wrapper">
+                            <div class="tick-container">
+                                <div class="tick-ring"></div>
+                                <span class="tick-label label-left">-12</span>
+                                <span class="tick-label label-top">0</span>
+                                <span class="tick-label label-right">+12</span>
+                                <div class="knob global-knob" id="pitchTuneKnob" data-val="50"></div>
+                            </div>
+                            <span class="text-[9px] font-bold text-[#1f1a14]">PITCH</span>
+                        </div>
+                    </div>
+
+                    <div class="panel-divider"></div>
+
+                    <!-- 4. ADSR ENVELOPE -->
+                    <div class="flex items-center gap-3 relative">
+                        <span class="absolute -top-6 left-1/2 -translate-x-1/2 text-[8px] font-bold tracking-widest text-[#82796e] whitespace-nowrap">ENVELOPE (ADSR)</span>
+
+                        <div class="knob-wrapper">
+                            <div class="tick-container">
+                                <div class="tick-ring"></div>
+                                <div class="knob global-knob" id="envAttack" data-val="5"></div>
+                            </div>
+                            <span class="text-[8px] font-bold text-[#1f1a14]">ATK</span>
+                        </div>
+                        <div class="knob-wrapper">
+                            <div class="tick-container">
+                                <div class="tick-ring"></div>
+                                <div class="knob global-knob" id="envDecay" data-val="30"></div>
+                            </div>
+                            <span class="text-[8px] font-bold text-[#1f1a14]">DEC</span>
+                        </div>
+                        <div class="knob-wrapper">
+                            <div class="tick-container">
+                                <div class="tick-ring"></div>
+                                <div class="knob global-knob" id="envSustain" data-val="20"></div>
+                            </div>
+                            <span class="text-[8px] font-bold text-[#1f1a14]">SUS</span>
+                        </div>
+                        <div class="knob-wrapper">
+                            <div class="tick-container">
+                                <div class="tick-ring"></div>
+                                <div class="knob global-knob" id="envRelease" data-val="25"></div>
+                            </div>
+                            <span class="text-[8px] font-bold text-[#1f1a14]">REL</span>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- Pixel-Aligned Sequencer Grid -->
+            <div class="panel-outline w-full overflow-x-auto grid-scroll mb-6 !py-8 !px-4">
+                <div class="flex flex-col gap-6 min-w-max mx-auto px-2">
+                    <div class="flex"><div class="row-label"></div><div class="flex gap-4 flex-1" id="ledRow"></div></div>
+                    <div class="flex"><div class="row-label text-[#1f1a14]"><div id="pilotA" class="pilot"></div>CH-A</div><div class="flex gap-4 flex-1" id="rowA"></div></div>
+                    <div class="flex"><div class="row-label text-[#1f1a14]"><div id="pilotB" class="pilot"></div>CH-B</div><div class="flex gap-4 flex-1" id="rowB"></div></div>
+                    <div class="flex"><div class="row-label text-[#1f1a14]">CH-C</div><div class="flex gap-4 flex-1" id="rowC"></div></div>
+                    <div class="flex mt-2"><div class="row-label text-[#1f1a14] text-[10px]">TRIG<br>OUT</div><div class="flex gap-4 flex-1" id="trigRow"></div></div>
+                </div>
+            </div>
+
+            <!-- Footer -->
+            <div class="flex flex-wrap items-center justify-between gap-6 w-full pt-4 border-t-2 border-[#38342e]/30">
+                <div class="flex flex-col gap-1">
+                    <span class="text-[10px] font-bold text-[#1f1a14]">KEYBOARD TRANSPOSE / PREVIEW</span>
+                    <div class="flex relative h-16" id="keyboardContainer"></div>
+                </div>
+
+                <div class="flex flex-col items-end gap-3">
+                    <div class="flex gap-4">
+                        <button id="demo1Btn" class="tactile-button text-[10px] font-bold tracking-widest px-3 py-2 rounded-sm cursor-pointer outline-none">DEMO 1: EBM</button>
+                        <button id="demo2Btn" class="tactile-button text-[10px] font-bold tracking-widest px-3 py-2 rounded-sm cursor-pointer outline-none">DEMO 2: ACID</button>
+                    </div>
+
+                    <div class="text-[9px] text-[#38342e] font-mono font-bold tracking-widest text-right mt-1">
+                        &copy; JOSE VELAZQUEZ MA / <a href="https://voltageandwave.co.uk/" target="_blank" rel="noopener noreferrer" class="hover:text-[#c83a2a] underline transition-colors">VOLTAGE &amp; WAVE</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="wooden-ear wooden-ear-right"></div>
+    </div>
+
+    <script type="module" src="js/main.js"></script>
+</body>
+</html>
